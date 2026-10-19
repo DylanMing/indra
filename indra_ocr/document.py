@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 from .pipeline import InputError, OrtOCR, Page, is_pdf, read_images
-from .textlayer import BROKEN_FONT_MAP, read_text_layer
+from .textlayer import BROKEN_FONT_MAP, page_turn, read_text_layer, vertical_layout
 
 CHECK_DPI = 72.0  # resolution of the render for the text-layer ink checks
 MAX_PAGE_PIXELS = 100e6  # a page larger than this at the set dpi renders at a lower dpi (large scans reach ~65 MP)
@@ -42,8 +42,15 @@ def readable(ocr: OrtOCR, runs: list) -> bool:
     letters = [c for r in runs for c in r.text if c.isalpha()]
     if not letters:
         return True
-    cjk = ocr.vocab_cjk.index if ocr.vocab_cjk is not None else {}
-    known = sum(c in ocr.vocab.index or c in cjk for c in letters)
+    vocabs = [ocr.vocab.index] + [v.index for _, v in ocr.groups.values()]
+    # A recognizer that reads Hangul as jamo knows a syllable by its jamo.
+    known = sum(
+        any(
+            c in v or all(j in v for j in unicodedata.normalize("NFD", c))
+            for v in vocabs
+        )
+        for c in letters
+    )
     return known >= READABLE_MIN * len(letters)
 
 
@@ -55,6 +62,18 @@ def right_to_left(tokens: list) -> bool:
         rtl += b in ("R", "AL")
         ltr += b == "L"
     return rtl > ltr
+
+
+def _covered(box, boxes: np.ndarray, frac: float = 0.5) -> bool:
+    """Whether more than ``frac`` of ``box`` lies inside one of ``boxes``."""
+    ix = np.clip(
+        np.minimum(box[2], boxes[:, 2]) - np.maximum(box[0], boxes[:, 0]), 0, None
+    )
+    iy = np.clip(
+        np.minimum(box[3], boxes[:, 3]) - np.maximum(box[1], boxes[:, 1]), 0, None
+    )
+    area = max((box[2] - box[0]) * (box[3] - box[1]), 1e-6)
+    return bool(((ix * iy) / area > frac).any())
 
 
 def _render(page, scale: float) -> np.ndarray:
@@ -77,7 +96,8 @@ def assign_runs(runs: list, boxes: np.ndarray, k: float) -> tuple[list[list], in
     if not len(boxes):
         return [], sum(not c.isspace() for r in runs for c, _ in r.chars)
     area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-    for idx, run in enumerate(runs):
+    for pos, run in enumerate(runs):
+        idx = run.seq if run.seq is not None else pos
         j = None
         for c, b in run.chars:
             if not c.isspace():
@@ -120,18 +140,16 @@ class Converter:
         ocr: OrtOCR,
         dpi: float = 200.0,
         mode: str = "auto",
-        pdf_order: bool = True,
         image_ocr: bool = True,
     ):
         """mode: auto (text layer where sound, OCR elsewhere), ocr (always OCR,
         never read the text layer), text (text layer even when the checks fail).
-        pdf_order: keep the PDF content order when it is coherent (False: the
-        order model always orders the lines).  image_ocr: OCR detected lines that
+        image_ocr: OCR detected lines that
         hold no text-layer characters (False: drop them)."""
         if mode not in ("auto", "ocr", "text"):
             raise ValueError(f"mode must be auto, ocr or text, not {mode!r}")
         self.ocr, self.dpi, self.mode = ocr, dpi, mode
-        self.pdf_order, self.image_ocr = pdf_order, image_ocr
+        self.image_ocr = image_ocr
 
     def page_scale(self, page) -> float:
         """Pixels per point for this page: the set dpi, lowered for pages so
@@ -147,7 +165,38 @@ class Converter:
         if self.mode != "ocr":
             t0 = time.perf_counter()
             s = CHECK_DPI / 72.0
-            tl = read_text_layer(page, _render(page, s), s)
+            check = _render(page, s)
+            tl = read_text_layer(page, check, s)
+            # A table set sideways: most characters share one quarter turn.  Read
+            # the page turned upright, as the OCR path does with orient.onnx.
+            k = page_turn(tl.stats)
+            rot = page.get_rotation()
+            if k and (rot + 90 * k) % 360 == 0:
+                # The page's /Rotate alone turns the text: read the page without
+                # it.  pdfium builds its text runs in the displayed frame, and on
+                # a turned page it can join a line's font runs out of order.
+                page.set_rotation(0)
+                upright = _render(page, s)
+                tl = read_text_layer(page, upright, s)
+                if tl.lines and (tl.trusted or self.mode == "text"):
+                    tl.stats["turn"] = k
+                    t["text_ms"] = 1000 * (time.perf_counter() - t0)
+                    return self._text_page(page, tl, t)
+                page.set_rotation(rot)
+                tl = read_text_layer(
+                    page, np.ascontiguousarray(np.rot90(check, -k)), s, k
+                )
+            elif k:
+                tl = read_text_layer(
+                    page, np.ascontiguousarray(np.rot90(check, -k)), s, k
+                )
+            elif vertical_layout(tl.stats):
+                # Vertical writing: upright characters, read in the page turned a
+                # quarter turn counter-clockwise (columns become lines).
+                tl = read_text_layer(
+                    page, np.ascontiguousarray(np.rot90(check, 1)), s, 0, 3
+                )
+                tl.stats["vertical"] = True
             t["text_ms"] = 1000 * (time.perf_counter() - t0)
             # A layer the recognizer cannot read beats OCR, unless its codes are junk.
             unreadable = tl.reason != BROKEN_FONT_MAP and not readable(
@@ -177,8 +226,13 @@ class Converter:
 
     def _text_page(self, page, tl, t: dict) -> Page:
         k = self.page_scale(page)
+        turn = tl.stats.get("turn", 0)
+        frame = tl.stats.get("frame", turn)
+        vertical = bool(tl.stats.get("vertical"))
         t0 = time.perf_counter()
         gray = _render(page, k)
+        if frame:
+            gray = np.ascontiguousarray(np.rot90(gray, -frame))
         t["render_ms"] = 1000 * (time.perf_counter() - t0)
         t0 = time.perf_counter()
         boxes = self.ocr.detect(gray)
@@ -193,9 +247,17 @@ class Converter:
             else:
                 empty.append(i)
         source = "text"
+        # Sideways runs (a rotated table header, a chart's axis label) come from
+        # the layer as their own lines; detected lines on them are not OCR'd.
+        side = [r for r in tl.rotated if r.text.strip()]
+        side_boxes = np.array([[v * k for v in r.bbox] for r in side], np.float32)
+        if len(side) and empty:
+            empty = [i for i in empty if not _covered(boxes[i, :4], side_boxes)]
         if empty and self.image_ocr and readable(self.ocr, tl.lines):
             t0 = time.perf_counter()
-            for i, r in zip(empty, self.ocr.recognize(gray, boxes[empty])):
+            for i, r in zip(
+                empty, self.ocr.recognize(gray, boxes[empty], vertical=vertical)
+            ):
                 if r[0].strip():
                     rec[i] = r
                     source = "hybrid"
@@ -205,14 +267,37 @@ class Converter:
             self._read_math(gray, boxes, rec)
             t["math_ms"] = 1000 * (time.perf_counter() - t0)
         keep = [i for i, r in enumerate(rec) if r is not None]
+        kept_boxes = boxes[keep].reshape(-1, boxes.shape[1])
+        kept_rec = [rec[i] for i in keep]
+        if len(side):
+            extra = np.zeros((len(side), boxes.shape[1]), np.float32)
+            extra[:, :4] = side_boxes
+            if boxes.shape[1] > 4:
+                extra[:, 4] = 1.0
+            kept_boxes = np.concatenate([kept_boxes, extra])
+            for r, b in zip(side, side_boxes):
+                cx = float(b[0] + b[2]) / 2  # one x: a sideways line is never cut
+                kept_rec.append((r.text, 1.0, [(c, cx, r.seq) for c in r.text]))
         out = self.ocr.assemble(
             (gray.shape[1], gray.shape[0]),
-            boxes[keep].reshape(-1, boxes.shape[1]),
-            [rec[i] for i in keep],
+            kept_boxes,
+            kept_rec,
             t,
-            content_order=self.pdf_order,
+            vertical=vertical,
         )
         out.source = source
+        out.rotation = 90 * turn
+        if vertical:  # back on the page as it is: (x, y) -> (W - y, x)
+            W = gray.shape[0]
+
+            def back(b):
+                return [W - b[3], b[0], W - b[1], b[2]]
+
+            for ln in out.lines:
+                ln.box = back(ln.box)
+            for b in out.blocks:
+                b["bbox"] = back(b["bbox"])
+            out.vertical = True
         out.note += f"; {lost} chars outside detected lines" if lost else ""
         return out
 
@@ -251,7 +336,12 @@ class Converter:
         """Yield (page index, Page) for a PDF or an image file (the file's bytes
         decide which).  A page that fails yields an empty Page whose ``source``
         is "error" and whose ``note`` says why; a file that cannot be opened
-        raises InputError."""
+        raises InputError.  max_pages: 0 reads every page; a negative value
+        raises ValueError."""
+        if max_pages < 0:
+            raise ValueError(
+                f"max_pages must be 0 (all pages) or more, not {max_pages}"
+            )
         path = Path(path)
         if not path.is_file():
             raise InputError(f"{path}: no such file")

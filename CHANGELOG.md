@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0
+
+Models from Hugging Face tag `v1.1.0`. On OmniParseBench (the benchmark's own harness), the headline goes from 62.3 to 66.7, and from 67.0 to 71.4 with `--math`. Handwriting tests 8.3% -> 25.2%, rotated pages 25.3% -> 50.3%, tables 56.3 -> 61.1.
+
+- **Handwriting.** The line detector and the Latin recognizer are trained on real handwritten and filled-form pages.
+- **80+ languages on scans.** New recognizers for Chinese, Japanese and Korean; for right-to-left scripts (Arabic, Persian, Urdu, Pashto, Hebrew); and for other scripts (the Indic scripts, Thai, Lao, Khmer, Myanmar, Sinhala, Georgian, Armenian, Ethiopic). A line classifier sends each line to its recognizer, and n-gram language models re-read unsure lines. The Latin recognizer adds the letters of Hausa, Fula, Akan, Azerbaijani and Uzbek and the tone marks of Vietnamese and Yoruba.
+- **Pages at any angle.** Tilts up to 45 degrees are straightened, and the orientation model is trained on real turned scans. A sideways table in a PDF's text layer reads upright, and a page turned by its PDF `/Rotate` reads its text layer in order.
+- **Light text on dark ground** (slides, dark table headers) reads.
+- **Chinese layout.** Chinese text blocks are no longer mistaken for tables.
+- **Examples.** `examples/ocr_image.py` (one image file to markdown, text or JSON) and `examples/quickstart.ipynb`.
+- `--max-pages` rejects a negative value.
+- The default model download is about 76 MB (was 18 MB): 30 MB of networks and 46 MB of language models.
+- Speed: about 44 pages per second on 32 x86 cores, and about 16% more time per page than 0.3.2, for the extra work on each OCR page.
+
 ## 0.3.2
 
 - Models from Hugging Face tag `v3.1.1`: the same models as `v3.1`, plus
