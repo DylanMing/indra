@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1
+
+Same models (Hugging Face tag `v1.1.0`).
+
+- **Right-to-left text layers in visual order** ([#11](https://github.com/datalab-to/indra/issues/11)). Some PDF producers, Chrome among them, store Arabic-script letters partly in visual order, so their text layer read letter-reversed, with spaces inside words. Such a layer is no longer trusted, and OCR reads the page instead. On Chrome-printed Wikipedia pages, word recall goes from 0.17 to 1.00 (Arabic), 0.25 to 0.89 (Persian), 0.22 to 0.95 (Pashto) and 0.28 to 0.98 (Urdu). Hebrew and Yiddish layers in logical order still read as text.
+- A right-to-left page is no longer mistaken for vertical writing.
+- `examples/quickstart.ipynb` downloads two sample pages (`examples/samples/`) when you have no `scan.png` or `equations.png`, so it runs as is (also in Colab).
+
 ## 1.1.0
 
 Models from Hugging Face tag `v1.1.0`. On OmniParseBench (the benchmark's own harness), the headline goes from 62.3 to 66.7, and from 67.0 to 71.4 with `--math`. Handwriting tests 8.3% -> 25.2%, rotated pages 25.3% -> 50.3%, tables 56.3 -> 61.1.

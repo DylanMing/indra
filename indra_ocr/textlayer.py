@@ -7,7 +7,10 @@ that select the recognizer's own training labels:
 
 - invisible text (render mode 3) marks an OCR layer over a scan;
 - replacement, private-use or control characters mark a broken font map;
-- a text run with no ink under it marks hidden or misplaced text.
+- a text run with no ink under it marks hidden or misplaced text;
+- right-to-left letters stored in visual order (left to right on the page, as
+  some PDF producers write Arabic script) cannot be put back into reading order
+  safely, so OCR reads the page instead.
 
 A run is pdfium's own text segment between the line breaks it generates.
 Coordinates are PDF points in the frame that pypdfium2 renders (crop box and
@@ -25,6 +28,12 @@ import numpy as np
 MAX_INVISIBLE_FRAC = 0.05
 MAX_BAD_CHAR_FRAC = 0.005
 MAX_NO_INK_LINE_FRAC = 0.03
+# Share of neighbouring right-to-left letters in a run that step left to right.
+# Logical order steps right to left (sound layers: 0-1%); a layer in visual
+# order steps left to right (Chrome-printed Arabic script: 52-94%).
+MAX_VISUAL_RTL_FRAC = 0.25
+MIN_RTL_PAIRS = 20
+VISUAL_RTL = "right-to-left text in visual order"  # TextLayer.reason
 DARK = 160  # grey level below which a pixel counts as ink
 
 
@@ -236,7 +245,8 @@ def extract_runs(
         np.abs(dy) <= 3 * h
     )  # a jump to another run is not a step
     down = int((ok & (dy > 0.3 * h) & (np.abs(dx) < 0.3 * h)).sum())
-    right = int((ok & (dx > 0.3 * h) & (np.abs(dy) < 0.3 * h)).sum())
+    # Horizontal steps go right (left-to-right scripts) or left (right to left).
+    right = int((ok & (np.abs(dx) > 0.3 * h) & (np.abs(dy) < 0.3 * h)).sum())
     stats["steps"] = [down, right]
     if frame:
         tx, ty = _turn_frame(px, py, W, H, frame)
@@ -271,6 +281,20 @@ def extract_runs(
                 q = 1
         runs.append(TextLine(box, text, seg, q, len(runs)))
     return runs, stats
+
+
+def visual_rtl_frac(runs: list[TextLine]) -> tuple[int, float]:
+    """(pairs, share): neighbouring right-to-left letters inside a run, and the
+    share of them that step left to right on the page."""
+    from .rtl import is_rtl
+
+    pairs = right = 0
+    for r in runs:
+        for (a, ba), (b, bb) in zip(r.chars, r.chars[1:]):
+            if is_rtl(a) and is_rtl(b):
+                pairs += 1
+                right += bb[0] + bb[2] > ba[0] + ba[2]
+    return pairs, right / max(pairs, 1)
 
 
 def invisible_text_frac(page) -> float:
@@ -324,6 +348,12 @@ def read_text_layer(
         return TextLayer([], size, False, "no text layer", st, rotated)
     if st["bad"] > MAX_BAD_CHAR_FRAC * max(st["chars"], 1):
         return TextLayer(runs, size, False, BROKEN_FONT_MAP, st, rotated)
+    # Only upright text has a reading direction on the page (a vertical page read
+    # turned does not).
+    pairs, visual = visual_rtl_frac(runs) if frame == turn else (0, 0.0)
+    if pairs >= MIN_RTL_PAIRS and visual > MAX_VISUAL_RTL_FRAC:
+        st["visual_rtl"] = round(visual, 3)
+        return TextLayer(runs, size, False, VISUAL_RTL, st, rotated)
     empty = no_ink_frac(gray, runs, scale)
     st["no_ink"] = round(empty, 4)
     if empty > MAX_NO_INK_LINE_FRAC:
