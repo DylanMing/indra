@@ -35,6 +35,23 @@ CHECK_DPI = 72.0  # resolution of the render for the text-layer ink checks
 MAX_PAGE_PIXELS = 100e6  # a page larger than this at the set dpi renders at a lower dpi (large scans reach ~65 MP)
 
 READABLE_MIN = 0.9  # share of the layer's letters the recognizer must know
+AGREE_LINES = 6  # text-layer lines whose script is checked against the page image
+AGREE_SHARE = 0.25  # under this share of agreeing lines, the layer is not the page's text
+LATIN_CODES = 0.9  # a layer line this Latin while its image is another script: legacy font codes
+NOT_THE_PAGE = "text layer does not match the page"  # Page.note when the check sends a page to OCR
+
+
+def latin_share(text: str) -> float:
+    """Share of the letters in text that are basic Latin (a-z, A-Z)."""
+    letters = [c for c in text if c.isalpha()]
+    return sum(c.isascii() for c in letters) / max(len(letters), 1)
+
+
+def layer_agrees(agree: list) -> bool:
+    """Whether a text layer matches its page: at least AGREE_SHARE of the checked
+    lines agree.  A legacy font (Kruti Dev and DevLys for Hindi, Bijoy for Bangla)
+    stores Latin codes for another script, so almost every line disagrees."""
+    return not agree or sum(agree) >= AGREE_SHARE * len(agree)
 
 
 def readable(ocr: OrtOCR, runs: list) -> bool:
@@ -181,7 +198,9 @@ class Converter:
                 if tl.lines and (tl.trusted or self.mode == "text"):
                     tl.stats["turn"] = k
                     t["text_ms"] = 1000 * (time.perf_counter() - t0)
-                    return self._text_page(page, tl, t)
+                    out = self._text_page(page, tl, t, check=self.mode == "auto")
+                    if out is not None:
+                        return out
                 page.set_rotation(rot)
                 tl = read_text_layer(
                     page, np.ascontiguousarray(np.rot90(check, -k)), s, k
@@ -202,9 +221,16 @@ class Converter:
             unreadable = tl.reason != BROKEN_FONT_MAP and not readable(
                 self.ocr, tl.lines
             )
-            if tl.lines and (tl.trusted or self.mode == "text" or unreadable):
-                return self._text_page(page, tl, t)
             note = tl.reason
+            if tl.lines and (tl.trusted or self.mode == "text" or unreadable):
+                # A trusted layer in a script the recognizer reads is checked
+                # against what the page shows (legacy fonts store other codes).
+                out = self._text_page(
+                    page, tl, t, check=self.mode == "auto" and tl.trusted and not unreadable
+                )
+                if out is not None:
+                    return out
+                note = NOT_THE_PAGE
             # A layer with a broken font map still places its glyphs: when most
             # run upright, the page is upright (orient.onnx is not asked).
             st = tl.stats
@@ -224,7 +250,11 @@ class Converter:
         out.note = f"{note}; {out.note}"
         return out
 
-    def _text_page(self, page, tl, t: dict) -> Page:
+    def _text_page(self, page, tl, t: dict, check: bool = False) -> Page | None:
+        """The page from its text layer.  check: first compare the script of up to
+        AGREE_LINES of the layer's lines with the script the line classifier sees
+        in their images; when they do not match (layer_agrees), return None, so OCR
+        reads the page."""
         k = self.page_scale(page)
         turn = tl.stats.get("turn", 0)
         frame = tl.stats.get("frame", turn)
@@ -246,6 +276,21 @@ class Converter:
                 rec[i] = (text, 1.0, tk)
             else:
                 empty.append(i)
+        if check:
+            t0 = time.perf_counter()
+            full = [i for i, r in enumerate(rec) if r and sum(c.isalpha() for c in r[0]) >= 4]
+            pick = full[:: max(1, len(full) // AGREE_LINES)][:AGREE_LINES]
+            if pick:
+                # A line agrees unless its layer text is Latin while the router is
+                # sure its image is another script.
+                groups, sure = self.ocr.box_groups(gray, boxes[pick])
+                agree = [
+                    not (latin_share(rec[i][0]) >= LATIN_CODES and g != "base" and s)
+                    for i, g, s in zip(pick, groups, sure)
+                ]
+                t["check_ms"] = 1000 * (time.perf_counter() - t0)
+                if not layer_agrees(agree):
+                    return None
         source = "text"
         # Sideways runs (a rotated table header, a chart's axis label) come from
         # the layer as their own lines; detected lines on them are not OCR'd.

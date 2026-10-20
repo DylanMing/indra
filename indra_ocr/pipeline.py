@@ -525,6 +525,17 @@ class OrtOCR:
                         out[j] = (text, 1.0, [(text, xc)])
         return out
 
+    def box_groups(self, gray: np.ndarray, boxes: np.ndarray) -> tuple[list[str], list[bool]]:
+        """line_groups for line boxes on the page (crops as recognize makes them);
+        every line is "base" when the model folder has no script.onnx."""
+        if self.script is None or not len(boxes):
+            return ["base"] * len(boxes), [False] * len(boxes)
+        pool = getattr(self, "pool", None)
+        window = getattr(self, "window", 1)
+        dark = line_darkness(gray, boxes[:, :4], pool) if window > 1 else None
+        crops = crop_lines(gray, boxes[:, :4], self.height, self.mask, pool=pool, dark=dark)
+        return self.line_groups(crops)
+
     def line_groups(self, crops: list, batch: int = 64) -> tuple[list[str], list[bool]]:
         """Per line crop, the group whose recognizer reads it (script.onnx), and
         whether the classifier is sure of it (probability over ROUTE_SURE); a

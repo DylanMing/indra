@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+Same models (Hugging Face tag `v1.1.0`).
+
+- **PDFs with legacy-font text layers.** Many Hindi PDFs use legacy fonts (Kruti Dev, DevLys), whose text layer stores Latin codes in place of Devanagari, so Indra read them as Latin garbage. Before trusting a text layer, Indra now checks the script of a few of its lines against the line images; when the layer is Latin while the page shows another script, OCR reads the page. On such Hindi pages, word accuracy goes from 0.01-0.20 to 0.85-0.89. The same check covers other legacy fonts, such as Bijoy for Bangla. It adds about 5 ms per text-layer page.
+
 ## 1.1.1
 
 Same models (Hugging Face tag `v1.1.0`).
