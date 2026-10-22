@@ -74,5 +74,6 @@ jobs:
         if: runner.os == 'Windows'
         with:
           name: IndraOCR-windows-setup
-          path: dist/IndraOCR-*-setup.exe
+          # the setup and the .sha256 build.py writes beside it
+          path: dist/IndraOCR-*-setup.exe*
           if-no-files-found: error

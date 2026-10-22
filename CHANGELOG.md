@@ -136,6 +136,15 @@ Same models (Hugging Face tag `v1.1.0`).
 - **The version was 1.1.2 while `CHANGELOG.md` had a 1.1.3 section.** `pyproject`
   and `indra_ocr.__version__` say 1.1.3, which is also what the exe and the
   installer now report.
+- **An unsigned installer with nothing to check it against.** There is no
+  Authenticode certificate, so SmartScreen stops the setup with "Windows 已保护你的
+  电脑" and the UAC prompt says 未知发布者, and a user had no way to tell a good
+  download from a re-packed one. `build.py --installer` now writes
+  `IndraOCR-<version>-setup.exe.sha256` beside the setup (`<hash>  <name>`, the
+  `sha256sum` format; `Get-FileHash` and `certutil -hashfile` print the same
+  digest), `desktop.yml` uploads it with the installer, and the README's new
+  *Installing on Windows* section says what the two prompts are, how to verify the
+  hash, and how an organisation can sign its own build so that nobody sees them.
 
 ## 1.1.2
 

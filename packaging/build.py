@@ -11,12 +11,15 @@ whole pipeline, headless, against the models inside the build), so a broken
 bundle fails here rather than on a user's machine.  On Windows ``--installer``
 then compiles ``packaging/indra_ocr.iss`` with Inno Setup into
 ``dist/IndraOCR-<version>-setup.exe``: a per-user install with a Start menu
-shortcut, an uninstall entry and an optional .pdf association.
+shortcut, an uninstall entry and an optional .pdf association, with the SHA256
+written next to it (``.sha256``): the installer is not code signed, so that is
+what a user checks.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import subprocess
@@ -114,6 +117,23 @@ def find_iscc() -> Path | None:
     return None
 
 
+def write_checksum(path: Path) -> Path:
+    """Write ``<file>.sha256`` beside a release file.
+
+    The installer is not code signed, so this is how a user can tell that the
+    164 MB they downloaded is the one this build produced: same format as
+    ``sha256sum``, and ``Get-FileHash -Algorithm SHA256`` prints the same digest.
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    out = path.with_name(path.name + ".sha256")
+    out.write_text(f"{digest.hexdigest()}  {path.name}\n", encoding="utf-8")
+    print(f"sha256 {digest.hexdigest()}  {path.name}", flush=True)
+    return out
+
+
 def build_installer(version: str, dist: Path) -> Path:
     """Compile the Inno Setup script; returns the .exe it wrote."""
     iscc = find_iscc()
@@ -121,6 +141,10 @@ def build_installer(version: str, dist: Path) -> Path:
         raise SystemExit(
             "Inno Setup is not installed: winget install JRSoftware.InnoSetup"
         )
+    # ISCC resolves a relative SourceDir against the .iss file, not this process.
+    dist = Path(dist).resolve()
+    if not dist.is_dir():
+        raise SystemExit(f"nothing to install from {dist}: build it first")
     cmd = [
         str(iscc),
         f"/DAppVersion={version}",
@@ -133,6 +157,7 @@ def build_installer(version: str, dist: Path) -> Path:
     if not setup.is_file():
         raise SystemExit(f"the installer was not written to {setup}")
     print(f"installer {setup} ({setup.stat().st_size / 1e6:.0f} MB)", flush=True)
+    write_checksum(setup)
     return setup
 
 

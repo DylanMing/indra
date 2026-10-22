@@ -221,7 +221,7 @@ The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows): that folder is 
 python packaging/build.py --console 0 --installer
 ```
 
-The installer is not code signed: Windows SmartScreen warns on first run. To sign it, add an Authenticode certificate on the build machine:
+It writes the SHA256 beside the setup (`IndraOCR-<version>-setup.exe.sha256`, the `sha256sum` format) and prints it, because the installer is not code signed: see [Installing on Windows](#installing-on-windows) for what a user sees and how to check the download. To sign it instead, add an Authenticode certificate on the build machine (and a timestamp, so the signature outlives the certificate):
 
 ```shell
 signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a dist\IndraOCR-<version>-setup.exe
@@ -229,6 +229,33 @@ signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a dist\In
 ```
 
 macOS (`codesign --deep --options runtime --sign "Developer ID Application: ..."` plus `xcrun notarytool submit`) and Linux (AppImage, and `.deb` with `dpkg-deb`) are the same shape: build on the platform, sign what the platform checks, ship the result. `.github/workflows/desktop.yml` builds and tests all three; the signing steps are commented out there, where the certificates would be secrets.
+
+### Installing on Windows
+
+Double-click `IndraOCR-<version>-setup.exe`. It installs per user, so there is no admin prompt; the wizard is in English and Simplified Chinese.
+
+**The installer is not code signed.** There is no Authenticode certificate behind it, so Windows cannot show who published it, and two prompts reflect that:
+
+- SmartScreen: "Windows 已保护你的电脑 / Microsoft Defender SmartScreen prevented an unrecognized app from starting". Click **更多信息 / More info**, then **仍要运行 / Run anyway**.
+- The elevation prompt (only if you chose an all-users install) says **未知发布者 / Unknown publisher**.
+- macOS and Linux ask for nothing on this front; a macOS build would need its own signing and notarisation.
+
+Nothing is wrong with the file: it is the same build that [`.github/workflows/desktop.yml`](.github/workflows/desktop.yml) produced. To check that what you downloaded is what was built, compare its SHA256 with the `.sha256` published next to it:
+
+```powershell
+# PowerShell: prints the hash, compare with IndraOCR-<version>-setup.exe.sha256
+Get-FileHash .\IndraOCR-1.1.3-setup.exe -Algorithm SHA256
+
+# or, no PowerShell:
+certutil -hashfile IndraOCR-1.1.3-setup.exe SHA256
+
+# or, with the .sha256 file in the same folder (prints True when they match):
+(Get-Content .\IndraOCR-1.1.3-setup.exe.sha256).Split(' ')[0] -eq (Get-FileHash .\IndraOCR-1.1.3-setup.exe -Algorithm SHA256).Hash.ToLower()
+```
+
+`sigcheck -h IndraOCR-1.1.3-setup.exe` from [Sysinternals](https://learn.microsoft.com/sysinternals/downloads/sigcheck) shows the same hash and "Unsigned".
+
+Inside one organisation, a build can be signed with a certificate the admins already trust, and then there is no prompt at all: `New-SelfSignedCertificate -Type CodeSigningCert` on a machine the domain trusts, or a certificate from the organisation's own CA, pushed to the other machines once (Group Policy → Trusted Root / Trusted Publishers), then signed with the same `signtool` line. A self-signed certificate that nobody trusts changes nothing for a stranger, which is why the public build ships a hash instead.
 
 ## Output
 

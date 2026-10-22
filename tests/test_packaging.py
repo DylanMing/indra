@@ -1,5 +1,6 @@
 """The packaging scripts: the version resource and the setup script."""
 
+import hashlib
 import importlib.util
 from pathlib import Path
 
@@ -68,3 +69,16 @@ def test_the_installer_is_found_or_reported(monkeypatch):
     for var in ("LOCALAPPDATA", "ProgramFiles(x86)", "ProgramFiles"):
         monkeypatch.setenv(var, "Z:\\nowhere")
     assert build.find_iscc() is None
+
+
+def test_the_checksum_file_is_the_sha256sum_format(tmp_path):
+    """The installer is unsigned: this file is how a download is checked."""
+    build = load_build()
+    setup = tmp_path / "IndraOCR-1.1.3-setup.exe"
+    setup.write_bytes(b"a pretend installer" * 5000)
+    out = build.write_checksum(setup)
+
+    assert out.name == "IndraOCR-1.1.3-setup.exe.sha256"
+    expected = hashlib.sha256(setup.read_bytes()).hexdigest()
+    # "<hash>  <name>": sha256sum reads it, Get-FileHash prints the same hash
+    assert out.read_text(encoding="utf-8") == f"{expected}  {setup.name}\n"
