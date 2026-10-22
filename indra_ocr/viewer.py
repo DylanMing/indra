@@ -289,6 +289,12 @@ def make_handler(engine: Engine):
                 pass
 
         def do_GET(self):
+            try:
+                self._get()
+            except Exception as e:  # noqa: BLE001  (the clipboard can be held away)
+                self._fail(e)
+
+        def _get(self):
             if self.path in ("/", "/index.html"):
                 self._send(
                     200,

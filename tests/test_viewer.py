@@ -142,3 +142,22 @@ def test_a_malformed_content_length_gets_a_400_not_a_dropped_socket():
 def test_the_page_shows_a_dpi_the_picker_does_not_offer():
     # --dpi 250 left the <select> blank, so the page asked for dpi 0 -> 200.
     assert "s.add(new Option(" in PAGE
+
+
+def test_a_clipboard_failure_answers_instead_of_dropping_the_connection(monkeypatch):
+    """grab_image() raises when another app holds the clipboard on Windows."""
+    import indra_ocr.viewer as viewer_mod
+
+    def boom():
+        raise OSError("clipboard is busy")
+
+    monkeypatch.setattr(viewer_mod, "grab_image", boom)
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(FakeEngine()))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        raw = _raw(srv.server_address[1], b"GET /clipboard HTTP/1.1\r\nHost: x\r\n\r\n")
+        assert b" 400 " in raw.split(b"\r\n", 1)[0]
+        assert b"clipboard is busy" in raw
+    finally:
+        srv.shutdown()
+        srv.server_close()

@@ -58,7 +58,9 @@ Same models (Hugging Face tag `v1.1.0`).
   header raised out of `BaseHTTPRequestHandler`: the socket closed with no status
   line and the page sat on "Uploading ...". The header is parsed inside the error
   path now and answers 400 with the reason, and a client that disconnects
-  mid-request no longer raises a second traceback.
+  mid-request no longer raises a second traceback. `GET /clipboard` (a failed
+  clipboard read, say another app holding it) answers the same way instead of
+  dropping the connection.
 - **A second copy of the app could share the first one's port.** On Windows
   `SO_REUSEADDR` (which `ThreadingHTTPServer` sets) allows binding a port that is
   already listening: two windows on `--port 8799` both printed the URL, and every
