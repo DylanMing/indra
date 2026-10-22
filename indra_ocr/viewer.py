@@ -30,6 +30,7 @@ from pathlib import Path
 import numpy as np
 
 from . import __version__
+from .clipboard import grab_image
 from .cli import add_source_args, source_options
 from .document import Converter
 from .models import model_dir
@@ -264,6 +265,14 @@ def make_handler(engine: Engine):
                     "defaults": engine.defaults,
                 }
                 self._send(200, json.dumps(info).encode())
+            elif self.path == "/clipboard":
+                # For a webview that hands no image to the page (WebKitGTK): the
+                # button asks the server, which reads this machine's clipboard.
+                png = grab_image()
+                if png:
+                    self._send(200, png, "image/png")
+                else:
+                    self._send(204, b"", "text/plain")
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -486,7 +495,7 @@ footer{padding:18px 24px;border-top:var(--hairline) solid var(--rule);display:fl
 </div>
 <div class="wrap">
 <aside>
- <div><div id="drop"><b>Drop a PDF or an image</b><span>or click to choose a file, or paste with Ctrl+V</span><input id="file" type="file" accept=".pdf,image/*" hidden></div><div id="fname"></div></div>
+ <div><div id="drop"><b>Drop a PDF or an image</b><span>or click to choose a file, or paste with Ctrl+V</span><input id="file" type="file" accept=".pdf,image/*" hidden></div><div id="fname"></div><button class="btn" id="pastebtn" style="margin-top:8px">Paste from clipboard</button></div>
  <div class="group"><div class="label">Source</div>
   <div class="seg" id="mode"><button data-v="auto">Auto</button><button data-v="ocr">OCR</button><button data-v="text">Text layer</button></div>
   <div class="hint" id="modehint"></div></div>
@@ -534,6 +543,13 @@ function pasted(cd){if(!cd)return null;
 document.addEventListener('paste',e=>{const f=pasted(e.clipboardData);if(!f)return;e.preventDefault();
  drop.classList.add('over');setTimeout(()=>drop.classList.remove('over'),600);
  $('#status').textContent='Pasted '+f.name;start(f)});
+// For webviews that hand no image to the page (WebKitGTK): ask the server, which
+// reads the clipboard of the machine the app runs on.
+$('#pastebtn').onclick=async()=>{$('#status').textContent='Reading the clipboard ...';
+ const r=await fetch('/clipboard'),ct=r.headers.get('Content-Type')||'';
+ if(r.status!==200||!ct.startsWith('image/')){$('#status').textContent='No image on the clipboard';return}
+ const b=await r.blob();$('#status').textContent='Pasted from the clipboard';
+ start(new File([b],`clipboard-${stamp()}.png`,{type:b.type||'image/png'}))};
 $('#rerun').onclick=()=>doc&&run();
 fetch('/info').then(r=>r.json()).then(i=>{$('#ver').textContent='v'+i.version;if(i.tesseract)$('#tesslab').hidden=false;const d=i.defaults||{};
  setMode(d.mode||'auto');$('#math').checked=!!d.math;$('#furniture').checked=!!d.furniture;$('#imageocr').checked=d.image_ocr!==false;

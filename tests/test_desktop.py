@@ -1,0 +1,105 @@
+"""The desktop shell: where it finds the models, and the headless self test."""
+
+import base64
+
+import pytest
+
+from indra_ocr import desktop
+
+PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+class FakeEngine:
+    """The handler and the self test only call upload() and page()."""
+
+    defaults = {}
+    tesseract = None
+
+    def upload(self, data: bytes) -> dict:
+        assert data.startswith(b"\x89PNG\r\n\x1a\n")
+        return {"id": "abc123", "pages": 1}
+
+    def page(self, did: str, n: int, opts: dict) -> dict:
+        return {
+            "page": n + 1,
+            "lines": [{"box": [0, 0, 10, 10], "text": "hello", "conf": 0.9}],
+            "blocks": [],
+            "timings": {"total_ms": 12.3},
+        }
+
+
+def test_bundled_models_beside_the_app(tmp_path, monkeypatch):
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "det.onnx").touch()
+    (models / "rec.onnx").touch()
+    monkeypatch.setattr(desktop, "_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(desktop.sys, "_MEIPASS", str(tmp_path / "absent"), raising=False)
+    assert desktop.bundled_models() == models
+
+
+def test_bundled_models_is_none_without_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(desktop, "_app_dir", lambda: tmp_path)
+    monkeypatch.setattr(desktop.sys, "_MEIPASS", str(tmp_path / "absent"), raising=False)
+    assert desktop.bundled_models() is None
+
+
+def test_resolve_models_order(tmp_path, monkeypatch):
+    bundled = tmp_path / "bundled"
+    explicit = tmp_path / "explicit"
+    monkeypatch.setattr(desktop, "bundled_models", lambda: bundled)
+    assert desktop.resolve_models(explicit) == explicit  # --model-dir wins
+    monkeypatch.setenv("INDRA_OCR_MODEL_DIR", str(tmp_path / "env"))
+    # None: model_dir() reads INDRA_OCR_MODEL_DIR itself
+    assert desktop.resolve_models(None) is None
+    monkeypatch.delenv("INDRA_OCR_MODEL_DIR")
+    assert desktop.resolve_models(None) == bundled  # then the shipped folder
+
+
+def test_selftest_reads_a_page_through_the_server(capsys):
+    srv, url = desktop.serve(FakeEngine(), 0)
+    try:
+        assert desktop.selftest(url) == 0
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    out = capsys.readouterr().out
+    assert "self test OK" in out
+    assert "1 lines" in out
+
+
+def test_sample_png_is_a_png():
+    assert desktop.sample_png().startswith(PNG[:8])
+
+
+def test_clipboard_endpoint_serves_the_image(monkeypatch):
+    import indra_ocr.viewer as viewer
+
+    srv, url = desktop.serve(FakeEngine(), 0)
+    monkeypatch.setattr(viewer, "grab_image", lambda: PNG)
+    try:
+        with __import__("urllib.request").request.urlopen(url + "/clipboard", timeout=10) as r:
+            assert r.status == 200
+            assert r.headers["Content-Type"] == "image/png"
+            assert r.read() == PNG
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_clipboard_endpoint_says_when_there_is_no_image(monkeypatch):
+    import urllib.request
+
+    import indra_ocr.viewer as viewer
+
+    srv, url = desktop.serve(FakeEngine(), 0)
+    monkeypatch.setattr(viewer, "grab_image", lambda: None)
+    try:
+        with urllib.request.urlopen(url + "/clipboard", timeout=10) as r:
+            assert r.status == 204  # no image: the page then says so
+            assert r.read() == b""
+    finally:
+        srv.shutdown()
+        srv.server_close()

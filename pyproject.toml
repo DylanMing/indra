@@ -26,12 +26,14 @@ Changelog = "https://github.com/datalab-to/indra/blob/main/CHANGELOG.md"
 Issues = "https://github.com/datalab-to/indra/issues"
 
 [project.optional-dependencies]
+desktop = ["pywebview", "pillow"]
 tesseract = ["pytesseract"]
 test = ["pytest", "pillow", "pikepdf"]
 
 [project.scripts]
 indra-ocr = "indra_ocr.cli:main"
 indra-ocr-viewer = "indra_ocr.viewer:main"
+indra-ocr-desktop = "indra_ocr.desktop:main"
 
 [tool.setuptools]
 packages = ["indra_ocr"]

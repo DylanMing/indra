@@ -178,6 +178,30 @@ indra-ocr-viewer --port 8765              # open http://localhost:8765
 
 A local web viewer: drop in a PDF or an image, and each page shows its lines, layout blocks and reading order over the page, with the rendered markdown, the markdown source, the lines with their confidences, the JSON output and the time of each stage. The pipeline options (text layer or OCR, math, headers and footers, reading order, OCR of text inside images, dpi, page limit) are set in the page, and lines, blocks, block labels and reading order can each be shown or hidden. Files stay on your machine. Paste an image with `Ctrl+V` (`Cmd+V` on macOS) instead of dropping it: a screenshot on the clipboard is read like a dropped file. `--tesseract` lets the page compare with Tesseract (needs `pytesseract` and a Tesseract install). Over SSH, forward the port: `ssh -N -L 8765:localhost:8765 host`.
 
+### Paste from the clipboard
+
+`Ctrl+V` (`Cmd+V` on macOS) reads the image on the clipboard, through the same path as a dropped file, so a screenshot is OCR'd without saving it first. A copied PDF pastes too, where the browser hands the file over.
+
+Some webviews (WebKitGTK, which pywebview uses on Linux) do not pass clipboard files to the page. For those the viewer has a **Paste from clipboard** button: it asks the local server, which reads the clipboard of the machine the app runs on (`indra_ocr/clipboard.py`: Pillow's `ImageGrab` on Windows and macOS, `wl-paste` or `xclip` on Linux).
+
+## Desktop app
+
+```shell
+pip install "indra-ocr[desktop]"          # pywebview and Pillow
+indra-ocr-desktop                         # a window, no browser tab
+```
+
+The window is the viewer in the system webview (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux), served from a random localhost port. Models are looked for in this order: `--model-dir`, `INDRA_OCR_MODEL_DIR`, a `models/` folder beside the app, then a Hugging Face download.
+
+To package it as a self-contained app (the models go inside, so it runs with no network and no Python install):
+
+```shell
+python packaging/build.py                 # -> dist/IndraOCR/ (about 300 MB)
+python packaging/build.py --console 0     # release build: no console window
+```
+
+The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); on Windows the target machine needs the WebView2 runtime, which Windows 10 and 11 ship with.
+
 ## Output
 
 Every page is a `Page` with:

@@ -15,7 +15,12 @@ Same models (Hugging Face tag `v1.1.0`).
 - **Paste a screenshot into the viewer.** `Ctrl+V` (`Cmd+V` on macOS) reads the
   image on the clipboard through the same path as a dropped file, so a screenshot
   can be OCR'd without saving it first. A copied PDF pastes too, where the
-  browser hands the file over.
+  browser hands the file over. A **Paste from clipboard** button covers webviews
+  that do not pass clipboard files to the page (WebKitGTK).
+- **A desktop app.** `pip install "indra-ocr[desktop]"` and `indra-ocr-desktop`
+  open the viewer in a native window; `packaging/build.py` builds a self-contained
+  app with the models inside (no network, no Python install) and checks it with
+  a headless `--selftest`.
 
 ## 1.1.2
 

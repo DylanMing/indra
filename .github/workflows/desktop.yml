@@ -1,0 +1,36 @@
+name: desktop
+
+# Builds the desktop app for each platform. PyInstaller does not cross-compile,
+# so the Windows .exe comes from windows-latest, the .app from macos-latest.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the app and the packager
+        run: pip install ".[desktop]" pyinstaller
+
+      - name: Fetch the models into the cache
+        run: python -c "from indra_ocr.models import model_dir; print(model_dir(math=True))"
+
+      - name: Build and self-test
+        run: python packaging/build.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IndraOCR-${{ matrix.os }}
+          path: dist/IndraOCR
+          if-no-files-found: error
