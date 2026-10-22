@@ -2,11 +2,14 @@
 
 import base64
 import json
+import tempfile
 import threading
 import urllib.request
 from http.server import ThreadingHTTPServer
 
-from indra_ocr.viewer import PAGE, make_handler
+import pytest
+
+from indra_ocr.viewer import KEPT_UPLOADS, Engine, PAGE, make_handler
 
 # 1x1 red PNG: what a clipboard paste hands over (raw bytes, no file name).
 PNG = base64.b64decode(
@@ -32,6 +35,42 @@ def test_page_has_a_paste_handler_and_says_so():
     assert "start(f)" in PAGE
     assert "or paste with Ctrl+V" in PAGE  # drop zone hint
     assert "Ctrl+V (Cmd+V)" in PAGE  # empty state
+
+
+def _engine() -> Engine:
+    """An Engine with no models: upload()/eviction need none of them."""
+    e = Engine.__new__(Engine)
+    e.docs, e.pdfs = {}, set()
+    e.lock = threading.Lock()
+    e.tmp = tempfile.TemporaryDirectory(prefix="indra_ocr_test_")
+    return e
+
+
+def test_a_pdf_with_a_little_junk_before_the_header_uploads(tmp_path):
+    """The CLI scans 1024 bytes for %PDF- (is_pdf); the viewer now agrees, so a
+    PDF that Acrobat or a mail gateway prefixed is not called "not an image"."""
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument.new()
+    page = doc.new_page(200, 300)
+    page.close()
+    path = tmp_path / "plain.pdf"
+    doc.save(str(path))
+    doc.close()
+    e = _engine()
+    res = e.upload(b"\n\n  " + path.read_bytes())
+    assert res["pages"] == 1
+    assert res["id"] in e.pdfs
+
+
+def test_an_evicted_upload_says_so_instead_of_a_key_error():
+    e = _engine()
+    first = e.upload(PNG)["id"]
+    for _ in range(KEPT_UPLOADS):
+        e.upload(PNG)
+    assert first not in e.docs
+    with pytest.raises(ValueError, match="no longer held"):
+        e.page(first, 0, {})
 
 
 def test_a_pasted_name_carries_local_time():

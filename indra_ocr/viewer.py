@@ -34,9 +34,10 @@ from .clipboard import grab_image
 from .cli import add_source_args, source_options
 from .document import Converter
 from .models import model_dir
-from .pipeline import OrtOCR
+from .pipeline import OrtOCR, is_pdf_bytes
 
 MAX_SIDE = 1600  # longest side of the page image sent to the browser
+KEPT_UPLOADS = 5  # uploads held in memory; older ones are dropped
 TIMING_KEYS = (
     "text_ms",
     "det_ms",
@@ -75,6 +76,7 @@ class Engine:
         self.tmp = tempfile.TemporaryDirectory(prefix="indra_ocr_viewer_")
         self.lock = threading.Lock()
         self.docs: dict[str, bytes] = {}
+        self.pdfs: set[str] = set()  # the uploads that are PDFs, not images
         self.tesseract = None
         if tesseract:
             import pytesseract
@@ -104,7 +106,8 @@ class Engine:
     def upload(self, data: bytes) -> dict:
         import uuid
 
-        if data[:5] == b"%PDF-":
+        is_pdf = is_pdf_bytes(data)
+        if is_pdf:
             import pypdfium2 as pdfium
 
             doc = pdfium.PdfDocument(data)
@@ -115,12 +118,14 @@ class Engine:
             n = 1
         did = uuid.uuid4().hex[:12]
         self.docs[did] = data
-        if data[:5] == b"%PDF-":  # the converter opens the PDF from a file
+        if is_pdf:  # the converter opens the PDF from a file
             with open(os.path.join(self.tmp.name, did + ".pdf"), "wb") as f:
                 f.write(data)
-        while len(self.docs) > 5:  # keep the last few uploads only
+            self.pdfs.add(did)
+        while len(self.docs) > KEPT_UPLOADS:  # keep the last few uploads only
             old = next(iter(self.docs))
             self.docs.pop(old)
+            self.pdfs.discard(old)
             try:
                 os.remove(os.path.join(self.tmp.name, old + ".pdf"))
             except OSError:
@@ -130,7 +135,12 @@ class Engine:
     def page(self, did: str, n: int, opts: dict) -> dict:
         import cv2
 
-        data = self.docs[did]
+        data = self.docs.get(did)
+        if data is None:
+            raise ValueError(
+                f"this upload is no longer held (the viewer keeps the last "
+                f"{KEPT_UPLOADS}): read the file again"
+            )
         mode = opts.get("mode", "auto")
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
@@ -144,7 +154,7 @@ class Engine:
                 mode=mode,
                 image_ocr=opts.get("image_ocr", True),
             )
-            if data[:5] == b"%PDF-":
+            if did in self.pdfs:
                 import pypdfium2 as pdfium
 
                 path = os.path.join(self.tmp.name, did + ".pdf")
