@@ -27,7 +27,9 @@ jobs:
         run: python -c "from indra_ocr.models import model_dir; print(model_dir(math=True))"
 
       - name: Build and self-test
-        run: python packaging/build.py
+        # A release build: no console window behind the GUI. build.py still gates
+        # on `--selftest`'s exit code, which needs no stdout.
+        run: python packaging/build.py --console 0
 
       - uses: actions/upload-artifact@v4
         with:

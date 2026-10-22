@@ -151,6 +151,30 @@ def assign_runs(runs: list, boxes: np.ndarray, k: float) -> tuple[list[list], in
     return toks, lost
 
 
+def open_pdf(path, password: str = ""):
+    """pdfium's document for ``path``; an InputError says what is wrong with it.
+
+    Shared with the parallel reader, which used to carry its own copy of this
+    mapping (so the CLI still said "cannot open the PDF (PDFium: Success)" for
+    an empty page tree).
+    """
+    import pypdfium2 as pdfium
+
+    try:
+        return pdfium.PdfDocument(str(path), password=password)
+    except pdfium.PdfiumError as e:
+        msg = str(e)
+        # pdfium reports no error code for a well-formed file whose page tree is
+        # empty: "Failed to load document (PDFium: Success)".
+        if "PDFium: Success" in msg:
+            raise InputError(f"{path}: the PDF has no pages") from e
+        raise InputError(
+            f"{path}: password-protected PDF (pass password=, or --password)"
+            if "password" in msg.lower()
+            else f"{path}: cannot open the PDF ({e})"
+        ) from e
+
+
 class Converter:
     def __init__(
         self,
@@ -175,13 +199,19 @@ class Converter:
         k = self.dpi / 72.0
         return min(k, (MAX_PAGE_PIXELS / max(w * h, 1.0)) ** 0.5)
 
+    def check_scale(self, page) -> float:
+        """Pixels per point for the text-layer check: CHECK_DPI, capped like the
+        OCR render.  Uncapped, a 14400 pt plan asked for a 207 MP array here
+        before it was known whether the page has a text layer at all."""
+        return min(CHECK_DPI / 72.0, self.page_scale(page))
+
     def pdf_page(self, pdf_path: str, doc, index: int) -> Page:
         page = doc[index]
         t: dict = {}
         note = "mode=ocr"
         if self.mode != "ocr":
             t0 = time.perf_counter()
-            s = CHECK_DPI / 72.0
+            s = self.check_scale(page)
             check = _render(page, s)
             tl = read_text_layer(page, check, s)
             # A table set sideways: most characters share one quarter turn.  Read
@@ -391,20 +421,10 @@ class Converter:
         if not path.is_file():
             raise InputError(f"{path}: no such file")
         if not is_pdf(path):
-            for i, gray in enumerate(read_images(path)[: max_pages or None]):
+            for i, gray in enumerate(read_images(path, limit=max_pages)):
                 yield i, self._safe(lambda: self.ocr(gray))
             return
-        import pypdfium2 as pdfium
-
-        try:
-            doc = pdfium.PdfDocument(str(path), password=password)
-        except pdfium.PdfiumError as e:
-            locked = "password" in str(e).lower()
-            raise InputError(
-                f"{path}: password-protected PDF (pass password=, or --password)"
-                if locked
-                else f"{path}: cannot open the PDF ({e})"
-            ) from e
+        doc = open_pdf(path, password)
         try:
             n = len(doc) if not max_pages else min(len(doc), max_pages)
             for i in range(n):

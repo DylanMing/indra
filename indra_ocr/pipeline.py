@@ -728,6 +728,11 @@ class OrtOCR:
         orient_ms = 1000 * (time.perf_counter() - t0)
         page = self._read(gray, k, a, small)
         page.timings["orient_ms"] += orient_ms
+        # _read summed its stages before orient_ms was known: count it too, or the
+        # stages add up to more than total_ms in the viewer and in --format json.
+        page.timings["total_ms"] = sum(
+            v for key, v in page.timings.items() if key != "total_ms"
+        )
         return page
 
     def _read(
@@ -1007,13 +1012,17 @@ def is_pdf(path: Path) -> bool:
         return is_pdf_bytes(f.read(1024))
 
 
-def read_images(path: Path) -> list[np.ndarray]:
+def read_images(path: Path, limit: int = 0) -> list[np.ndarray]:
     """Grayscale pages of an image file; every frame of a multi-page TIFF.
 
     The bytes are read here rather than by ``cv2.imread``: that calls fopen with
     the ANSI code page on Windows, so ``扫描件.png`` was reported as "not a PDF or
     a readable image" instead of being read.  Reading and decoding are separate
     steps, so any filename Python can open works.
+
+    ``limit``: copy at most this many frames (0: all of them).  With 1 the first
+    frame alone is decoded, so ``--max-pages 1`` on a 40-page TIFF does not decode
+    the other 39 first.
     """
     try:
         data = np.frombuffer(Path(path).read_bytes(), np.uint8)
@@ -1021,12 +1030,18 @@ def read_images(path: Path) -> list[np.ndarray]:
         raise InputError(f"{path}: {e.strerror or e}") from e
     if data.size == 0:
         raise InputError(f"{path}: not a PDF or a readable image")
-    ok, frames = cv2.imdecodemulti(data, cv2.IMREAD_GRAYSCALE)
-    if not ok or not frames:
+    if limit == 1:  # the first frame is the only one wanted
         img = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)
         frames = [img] if img is not None else []
+    else:
+        ok, frames = cv2.imdecodemulti(data, cv2.IMREAD_GRAYSCALE)
+        if not ok or not frames:
+            img = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)
+            frames = [img] if img is not None else []
     if not frames:
         raise InputError(f"{path}: not a PDF or a readable image")
+    if limit:
+        frames = frames[:limit]
     return [np.ascontiguousarray(f) for f in frames]
 
 

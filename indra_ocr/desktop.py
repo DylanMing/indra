@@ -20,7 +20,7 @@ from pathlib import Path
 
 from . import __version__
 from .models import ModelError
-from .viewer import Engine, make_handler
+from .viewer import Engine, LocalServer, make_handler
 
 TITLE = "Indra OCR"
 
@@ -77,8 +77,12 @@ def sample_png(text: str = "Indra OCR desktop") -> bytes:
 
 def serve(engine: Engine, port: int = 0) -> tuple[ThreadingHTTPServer, str]:
     """Start the viewer's HTTP server on localhost; returns it and its URL."""
-    srv = ThreadingHTTPServer(("127.0.0.1", port), make_handler(engine))
-    srv.daemon_threads = True
+    try:
+        srv = LocalServer(("127.0.0.1", port), make_handler(engine))
+    except OSError as e:  # --port is already in use
+        raise OSError(
+            f"cannot listen on 127.0.0.1:{port}: {e.strerror or e}"
+        ) from e
     url = f"http://127.0.0.1:{srv.server_address[1]}"
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv, url
@@ -162,6 +166,9 @@ def main(argv: list[str] | None = None) -> int:
             srv.server_close()
         return 0
     except ModelError as e:
+        print(f"indra-ocr-desktop: {e}", flush=True)
+        return 1
+    except OSError as e:  # the port, or a temp folder, is not available
         print(f"indra-ocr-desktop: {e}", flush=True)
         return 1
 

@@ -53,6 +53,52 @@ Same models (Hugging Face tag `v1.1.0`).
   answered "not a PDF or a readable image". Both use `pipeline.is_pdf_bytes` now.
   An upload dropped by the five-document limit also says so, instead of
   `KeyError: '3f2a…'`.
+- **A malformed request left the page waiting forever.** `/upload` and `/page`
+  read `Content-Length` before the handler's `try`, so a non-numeric or negative
+  header raised out of `BaseHTTPRequestHandler`: the socket closed with no status
+  line and the page sat on "Uploading ...". The header is parsed inside the error
+  path now and answers 400 with the reason, and a client that disconnects
+  mid-request no longer raises a second traceback.
+- **A second copy of the app could share the first one's port.** On Windows
+  `SO_REUSEADDR` (which `ThreadingHTTPServer` sets) allows binding a port that is
+  already listening: two windows on `--port 8799` both printed the URL, and every
+  request was served by the first process while the second loaded a whole second
+  copy of the models. The server refuses that bind on Windows and names the port.
+- **`--dpi` outside 150/200/300 reached the page.** The picker offers only those
+  three, so `--dpi 250` left the `<select>` blank, the page sent `dpi: 0`, and the
+  document rendered at 200 dpi. The picker now shows the value it was given, and
+  the server treats a missing or non-positive `dpi` as 200.
+- **An unusable `--out` folder is one line, not a traceback.** Pointing `--out` at
+  an existing file, or at a folder without write permission, raised
+  `FileExistsError`/`PermissionError` through `main()` with the first input's stack
+  and no output. It now names the path, counts the input as failed, and reads the
+  next one.
+- **Release builds carried a console window.** CI built with `build.py`'s default
+  (`--console 1`), so the published app had a console subsystem and left a console
+  window behind the GUI; `--console 0` is what the README documents for releases.
+  The workflow passes it now.
+- **`python -m indra_ocr` reported success when an input failed.** `__main__.py`
+  called `main()` and dropped its `return 1`, so a missing or unreadable file
+  printed "1 of 1 inputs failed" and exited 0 (the `indra-ocr` script exited 1
+  correctly, which is why it went unnoticed). It raises `SystemExit` now.
+- **A very large page allocated more for the text-layer check than for its OCR.**
+  `Converter.page_scale` caps the render at `MAX_PAGE_PIXELS`, but the check pass
+  always asked for 1 px/pt: a 14400 pt plan wanted a 207 MP array before the page
+  was even known to have a text layer, 3x its capped OCR render (measured peak
+  785 MB in `auto` against 529 MB in `--mode ocr`). The check is scaled like the
+  render (`Converter.check_scale`).
+- **`--max-pages 1` on a multi-page TIFF decoded every frame first.** A 40-frame
+  120 MB TIFF peaked 286 MB above baseline to return one page; the first frame is
+  now decoded alone when only one page is wanted (`read_images(..., limit=)`).
+- **Stage timings added up to more than `total_ms` on image pages.** The
+  orientation pass was added to `orient_ms` after `_read` had summed the stages,
+  so `--format json` and the viewer's per-page bar were 6-13% low (scan.png:
+  2508 ms reported, 2670 ms of stages). The total counts it now.
+- **A PDF with an empty page tree was reported as unopenable.** pdfium answers
+  "Failed to load document (PDFium: Success)" for a well-formed file with no
+  pages; the CLI passed that on as "cannot open the PDF". It says "the PDF has no
+  pages" now. The parallel reader and `Converter` share one `document.open_pdf`,
+  which also stopped the message from differing between `--cores 1` and the pool.
 
 ## 1.1.2
 

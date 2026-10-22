@@ -140,7 +140,14 @@ def _main(argv=None):
     )
     a = ap.parse_args(argv)
     if a.out:
-        a.out.mkdir(parents=True, exist_ok=True)
+        try:
+            a.out.mkdir(parents=True, exist_ok=True)
+        except OSError as e:  # a file of that name, a read-only parent, ...
+            print(
+                f"indra-ocr: cannot use {a.out} as the output folder: {e.strerror or e}",
+                file=sys.stderr,
+            )
+            return 1
     ext = {"md": ".md", "text": ".txt", "json": ".jsonl"}[a.format]
     failed, names = 0, set()
     results = convert_many(
@@ -201,7 +208,14 @@ def _main(argv=None):
                 k += 1
                 name = f"{path.stem}_{k}"
             names.add(name)
-            (a.out / (name + ext)).write_text(body, encoding="utf-8")
+            try:
+                (a.out / (name + ext)).write_text(body, encoding="utf-8")
+            except OSError as e:  # read-only folder, file locked, path too long
+                print(
+                    f"indra-ocr: cannot write {a.out / (name + ext)}: {e.strerror or e}",
+                    file=sys.stderr,
+                )
+                failed += 1
         else:
             sys.stdout.write(body)
     if failed:

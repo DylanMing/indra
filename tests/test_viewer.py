@@ -100,3 +100,45 @@ def test_pasted_image_bytes_go_through_upload_and_page():
         srv.shutdown()
         srv.server_close()
         t.join(timeout=5)
+
+
+def _raw(port: int, request: bytes) -> bytes:
+    import socket
+
+    with socket.create_connection(("127.0.0.1", port), timeout=10) as s:
+        s.sendall(request)
+        s.shutdown(socket.SHUT_WR)
+        chunks = []
+        while True:
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def test_a_malformed_content_length_gets_a_400_not_a_dropped_socket():
+    """A bad header escaped BaseHTTPRequestHandler, which closed the socket with no
+    status line; the page's fetch() then waited forever on "Uploading ..."."""
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(FakeEngine()))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        for header in (b"abc", b"-5"):
+            raw = _raw(
+                port,
+                b"POST /upload HTTP/1.1\r\nHost: x\r\nContent-Length: "
+                + header
+                + b"\r\n\r\n",
+            )
+            head = raw.split(b"\r\n", 1)[0]
+            assert b" 400 " in head, (header, raw[:160])
+            assert b'"error"' in raw
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_the_page_shows_a_dpi_the_picker_does_not_offer():
+    # --dpi 250 left the <select> blank, so the page asked for dpi 0 -> 200.
+    assert "s.add(new Option(" in PAGE

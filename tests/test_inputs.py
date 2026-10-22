@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from indra_ocr.document import MAX_PAGE_PIXELS, Converter
+from indra_ocr.document import CHECK_DPI, MAX_PAGE_PIXELS, Converter
 from indra_ocr.pipeline import InputError, Page, is_pdf, read_images
 
 
@@ -50,6 +50,46 @@ def test_every_tiff_frame_is_a_page(tmp_path):
     path = tmp_path / "three.tiff"
     frames[0].save(path, save_all=True, append_images=frames[1:])
     assert len(read_images(path)) == 3
+
+
+def test_max_pages_reads_one_tiff_frame_without_decoding_the_rest(monkeypatch, tmp_path):
+    """--max-pages 1 decoded every frame first (+286 MB on a 40-frame TIFF)."""
+    import cv2
+    from PIL import Image
+
+    frames = [Image.new("L", (60, 80), v) for v in (255, 200, 255)]
+    path = tmp_path / "three.tiff"
+    frames[0].save(path, save_all=True, append_images=frames[1:])
+
+    def no_multi(*a, **k):
+        raise AssertionError("all frames decoded although one page was asked for")
+
+    monkeypatch.setattr(cv2, "imdecodemulti", no_multi)
+    assert len(read_images(path, limit=1)) == 1
+    assert len(list(Converter(StubOCR()).convert(path, max_pages=1))) == 1
+
+
+def test_a_pdf_with_no_pages_says_so(tmp_path):
+    # pdfium answers "Failed to load document (PDFium: Success)" for it.
+    import pypdfium2 as pdfium
+
+    path = tmp_path / "empty.pdf"
+    doc = pdfium.PdfDocument.new()
+    doc.save(str(path))
+    doc.close()
+    with pytest.raises(InputError, match="has no pages"):
+        list(Converter(StubOCR()).convert(path))
+
+
+def test_the_text_layer_check_is_capped_like_the_render():
+    class BigPage:
+        def get_size(self):
+            return 14400, 14400  # pikepdf's largest page
+
+    conv = Converter(StubOCR(), dpi=200)
+    s = conv.check_scale(BigPage())
+    assert s < CHECK_DPI / 72.0, "the check render must be scaled down"
+    assert 14400 * s * 14400 * s <= MAX_PAGE_PIXELS * 1.01
 
 
 def test_an_image_under_a_non_ascii_path_is_read(tmp_path):

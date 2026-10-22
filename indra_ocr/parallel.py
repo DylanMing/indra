@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from .document import open_pdf
 from .pipeline import InputError, Page, is_pdf
 
 THREADS_PER_WORKER = 1  # ORT threads in each worker process
@@ -67,8 +68,6 @@ def _run(unit: tuple):
 
 def _plan(paths: list, max_pages: int, password: str | None) -> list:
     """Per input: its work units, or the InputError that stops it."""
-    import pypdfium2 as pdfium
-
     plan = []
     for p in paths:
         path = str(p)
@@ -78,18 +77,11 @@ def _plan(paths: list, max_pages: int, password: str | None) -> list:
             plan.append([(path, None, max_pages)])
         else:
             try:
-                doc = pdfium.PdfDocument(path, password=password)
+                doc = open_pdf(path, password)
                 n = len(doc)
                 doc.close()
-            except pdfium.PdfiumError as e:
-                locked = "password" in str(e).lower()
-                plan.append(
-                    InputError(
-                        f"{path}: password-protected PDF (pass password=, or --password)"
-                        if locked
-                        else f"{path}: cannot open the PDF ({e})"
-                    )
-                )
+            except InputError as e:
+                plan.append(e)
                 continue
             n = min(n, max_pages) if max_pages else n
             plan.append([(path, i, password) for i in range(n)])

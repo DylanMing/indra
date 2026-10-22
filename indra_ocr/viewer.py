@@ -59,6 +59,20 @@ def decode_image(data: bytes):
     yield 0, img, 0.0
 
 
+class LocalServer(ThreadingHTTPServer):
+    """The viewer's server: localhost only.
+
+    ``allow_reuse_address`` stays on for POSIX, where it only lets a restart take
+    a port still in TIME_WAIT.  On Windows SO_REUSEADDR lets a *second* process
+    bind a port that is already listening: the second window would be served by
+    the first process's engine, after loading a second copy of the models for
+    nothing.
+    """
+
+    allow_reuse_address = os.name != "nt"
+    daemon_threads = True
+
+
 class Engine:
     """Holds uploaded documents and reads one page per request, with the options
     the page sends, so the browser shows each page as soon as it is done."""
@@ -145,7 +159,12 @@ class Engine:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
         math, furniture = bool(opts.get("math")), bool(opts.get("furniture"))
-        dpi = float(opts.get("dpi") or 200.0)
+        try:
+            dpi = float(opts.get("dpi") or 200.0)
+        except (TypeError, ValueError):
+            dpi = 200.0
+        if not 0 < dpi < float("inf"):  # 0, negative or NaN: keep the default
+            dpi = 200.0
         with self.lock:
             ocr = self._ocr(math, furniture)
             conv = Converter(
@@ -261,6 +280,14 @@ def make_handler(engine: Engine):
             self.end_headers()
             self.wfile.write(body)
 
+        def _fail(self, e: Exception) -> None:
+            """400 with the reason, unless the client is already gone."""
+            print(f"error: {e}", flush=True)
+            try:
+                self._send(400, json.dumps({"error": str(e)}).encode())
+            except OSError:  # the browser closed the connection mid-request
+                pass
+
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 self._send(
@@ -287,9 +314,14 @@ def make_handler(engine: Engine):
                 self._send(404, b"not found", "text/plain")
 
         def do_POST(self):
-            n = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(n)
+            # The header is parsed inside the try: a malformed Content-Length used
+            # to escape BaseHTTPRequestHandler, which then closed the socket with
+            # no status line at all, and the page waited forever.
             try:
+                n = int(self.headers.get("Content-Length", "0"))
+                if n < 0:
+                    raise ValueError(f"Content-Length cannot be {n}")
+                body = self.rfile.read(n)
                 if self.path == "/upload":
                     res = engine.upload(body)
                 elif self.path == "/page":
@@ -299,8 +331,7 @@ def make_handler(engine: Engine):
                     return self._send(404, b"not found", "text/plain")
                 self._send(200, json.dumps(res).encode())
             except Exception as e:  # noqa: BLE001  (report the error to the page)
-                print(f"error: {e}", flush=True)
-                self._send(400, json.dumps({"error": str(e)}).encode())
+                self._fail(e)
 
     return Handler
 
@@ -565,7 +596,7 @@ $('#pastebtn').onclick=async()=>{$('#status').textContent='Reading the clipboard
 $('#rerun').onclick=()=>doc&&run();
 fetch('/info').then(r=>r.json()).then(i=>{$('#ver').textContent='v'+i.version;if(i.tesseract)$('#tesslab').hidden=false;const d=i.defaults||{};
  setMode(d.mode||'auto');$('#math').checked=!!d.math;$('#furniture').checked=!!d.furniture;$('#imageocr').checked=d.image_ocr!==false;
- if(d.dpi)$('#dpi').value=String(Math.round(d.dpi));if(d.max_pages)$('#maxp').value=d.max_pages});
+ if(d.dpi){const v=String(Math.round(d.dpi)),s=$('#dpi');if(![...s.options].some(o=>o.value===v))s.add(new Option(v,v));s.value=v}if(d.max_pages)$('#maxp').value=d.max_pages});
 setMode('auto');
 async function start(f){$('#fname').textContent=f.name+' · '+(f.size/1024).toFixed(0)+' KB';$('#status').textContent='Uploading ...';
  const u=await (await fetch('/upload',{method:'POST',body:await f.arrayBuffer()})).json();
@@ -672,7 +703,14 @@ def _main():
         "max_pages": a.max_pages,
     }
     engine = Engine(a.model_dir, a.threads, a.tesseract, a.tesseract_lang, defaults)
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(engine))
+    try:
+        srv = LocalServer(("127.0.0.1", a.port), make_handler(engine))
+    except OSError as e:  # the port is taken by another program
+        print(
+            f"indra-ocr-viewer: cannot listen on port {a.port}: {e.strerror or e}",
+            flush=True,
+        )
+        raise SystemExit(1) from None
     print(
         f"Indra OCR viewer on http://localhost:{a.port}  ({a.threads} threads)",
         flush=True,
