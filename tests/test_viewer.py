@@ -34,6 +34,13 @@ def test_page_has_a_paste_handler_and_says_so():
     assert "Ctrl+V (Cmd+V)" in PAGE  # empty state
 
 
+def test_a_pasted_name_carries_local_time():
+    # toISOString() is UTC: a screenshot taken at 16:40 in Shanghai was listed
+    # as 08:40, eight hours before the user took it.
+    assert "toISOString" not in PAGE
+    assert "getHours" in PAGE and "getFullYear" in PAGE
+
+
 def test_pasted_image_bytes_go_through_upload_and_page():
     srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(FakeEngine()))
     t = threading.Thread(target=srv.serve_forever, daemon=True)

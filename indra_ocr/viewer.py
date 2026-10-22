@@ -536,7 +536,9 @@ drop.onclick=()=>file.click();file.onchange=()=>file.files[0]&&start(file.files[
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};drop.ondragleave=()=>drop.classList.remove('over');
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');e.dataTransfer.files[0]&&start(e.dataTransfer.files[0])};
 // Ctrl+V / Cmd+V: a pasted screenshot (or a copied PDF) takes the same path as a dropped file.
-const stamp=()=>new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+// The name is what the user reads in the file list, so it carries local time, not UTC.
+const stamp=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');
+ return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`};
 function pasted(cd){if(!cd)return null;
  for(const it of cd.items||[]){if(it.kind==='file'&&/^(image\/|application\/pdf)/.test(it.type)){const b=it.getAsFile();if(b)return b.type==='application/pdf'?new File([b],`clipboard-${stamp()}.pdf`,{type:b.type}):new File([b],`clipboard-${stamp()}.png`,{type:b.type||'image/png'})}}
  const f=[...(cd.files||[])][0];return f&&(/^(image\/|application\/pdf)/.test(f.type))?f:null}
