@@ -187,7 +187,8 @@ def test_window_test_closes_the_window(capsys):
 
     assert desktop.window_test(Webview(), "http://127.0.0.1:1") == 0
     assert Webview.window.destroyed is True
-    assert "window test OK" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "window test OK" in out and "gtk" in out
 
 
 def test_window_test_fails_when_the_window_cannot_start(monkeypatch):

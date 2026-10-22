@@ -184,7 +184,8 @@ def window_test(webview, url: str) -> int:
         watchdog.cancel()
     if not state["open"]:
         return fail("the window did not open")
-    print(f"window test OK: {TITLE} on the {webview.guilib} backend", flush=True)
+    backend = getattr(webview.guilib, "__name__", None) or str(webview.guilib)
+    print(f"window test OK: {TITLE} opened on {backend}", flush=True)
     return 0
 
 
