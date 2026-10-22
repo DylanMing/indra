@@ -25,7 +25,7 @@ Same models (Hugging Face tag `v1.1.0`).
 - **Windows.** The desktop app and the bundle were run on Windows 11 (x64): the
   Edge backend, `Ctrl+V` in the page, the clipboard fallback (Pillow's
   `ImageGrab`) and a 352 MB one-folder build that OCRs with its own models and an
-  empty Hugging Face cache. Two things only Windows showed:
+  empty Hugging Face cache. Three things only Windows showed:
   - A console or pipe on Windows uses a legacy code page (cp936, cp1252), so one
     character outside it (`•`, a math sign) raised `UnicodeEncodeError` and ended
     the run with the rest of the document lost. Pipes now get UTF-8; a console
@@ -36,6 +36,23 @@ Same models (Hugging Face tag `v1.1.0`).
     backend, and asks for PyGObject only on Linux; `pip install ".[desktop,build]"`
     now brings PyInstaller, and `build.py --models packaging/models` no longer
     empties the folder it copies from.
+- **A Chinese or Japanese Windows could not read an image, or use math.** Two
+  places took the machine's code page instead of the file's:
+  - `cv2.imread` opens a file with the ANSI code page, so `扫描件.png` came back as
+    "not a PDF or a readable image" although the file was fine. The bytes are now
+    read by Python and decoded in memory, so any filename Python can open works
+    (a test pins that `imread`/`imreadmulti` are not used).
+  - `math_meta.json` was read with `Path.read_text()` and no encoding, which is
+    cp936 on Chinese Windows: the `°`, `–`, `’` and `⁄` tokens raised
+    `UnicodeDecodeError`, so `--math`, `math=True` and the viewer's **Math as
+    LaTeX** switch never worked there. Model metadata is read as UTF-8
+    (`indra_ocr.models.read_json`), for `meta.json` too.
+- **A PDF the CLI read, the viewer refused.** `/upload` looked only at the first
+  5 bytes for `%PDF-`, while the pipeline scans 1024 (a header may follow a little
+  junk, as Acrobat and mail gateways write it): the CLI read the file and the app
+  answered "not a PDF or a readable image". Both use `pipeline.is_pdf_bytes` now.
+  An upload dropped by the five-document limit also says so, instead of
+  `KeyError: '3f2a…'`.
 
 ## 1.1.2
 
