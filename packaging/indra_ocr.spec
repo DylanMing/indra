@@ -33,6 +33,10 @@ hiddenimports += collect_submodules("webview.platforms")
 # Windows only (pythonnet + WebView2); a warning on other platforms is expected.
 hiddenimports += ["clr"]
 
+# Linux: pywebview's GTK backend, when the system provides PyGObject (build.py
+# puts /usr/lib/python3/dist-packages on the path for the analysis).
+hiddenimports += ["gi", "gi.repository.Gtk", "gi.repository.WebKit2"]
+
 if MODELS.is_dir():
     datas.append((str(MODELS), "models"))
 

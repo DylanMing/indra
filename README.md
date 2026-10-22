@@ -200,7 +200,7 @@ python packaging/build.py                 # -> dist/IndraOCR/ (about 300 MB)
 python packaging/build.py --console 0     # release build: no console window
 ```
 
-The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); on Windows the target machine needs the WebView2 runtime, which Windows 10 and 11 ship with.
+The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); on Windows the target machine needs the WebView2 runtime, which Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
 
 ## Output
 

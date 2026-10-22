@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
                 srv.server_close()
         engine = Engine(models, a.threads, False, "eng", dict(DEFAULTS))
         srv, url = serve(engine, a.port)
-        print(f"{TITLE} on {url} (models: {models or 'downloaded'})", flush=True)
+        print(f"{TITLE} on {url} (models: {models or 'Hugging Face cache'})", flush=True)
         try:
             import webview
         except Exception as e:  # noqa: BLE001  (no webview backend installed)

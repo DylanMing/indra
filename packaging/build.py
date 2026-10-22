@@ -80,6 +80,16 @@ def main() -> int:
     print(f"staged {len(list(staged.iterdir()))} files in {staged}", flush=True)
 
     env = dict(os.environ, INDRA_CONSOLE=a.console)
+    # On Linux the webview backend is gi/GTK from the system, not from the venv:
+    # let PyInstaller find it, so a Linux bundle opens a window too.
+    try:
+        import gi  # noqa: F401
+    except ImportError:
+        system = Path("/usr/lib/python3/dist-packages")
+        if system.is_dir():
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(system), env.get("PYTHONPATH", "")]
+            ).rstrip(os.pathsep)
     cmd = [
         sys.executable,
         "-m",
