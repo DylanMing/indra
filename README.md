@@ -56,7 +56,7 @@ indra-ocr scan.png --format json       # lines, boxes, layout blocks, confidence
 indra-ocr-viewer                       # local web viewer on http://localhost:8765
 ```
 
-The first run downloads the models (about 76 MB) from [Hugging Face](https://huggingface.co/datalab-to/indra-ocr).
+The first run downloads the models (about 76 MB) from [Hugging Face](https://huggingface.co/datalab-to/indra-ocr). Prefer a window to a browser tab? `pip install "indra-ocr[desktop]"` and run `indra-ocr-desktop` — see [Desktop app](#desktop-app), which also explains the packaged `.exe`/`.dmg`.
 
 ## Examples
 
@@ -121,7 +121,7 @@ indra-ocr paper.pdf --math                # write math as LaTeX (off by default;
 - `--timings`: print per-page source and time to stderr
 - `--model-dir`: folder with the models (default: download)
 
-The CLI continues past files it cannot read, and exits with 1 if any failed.
+Exit codes: `0` when every input was read, `1` when one was not (a missing or locked file, a broken PDF, a bad password) or when the models are missing, with the reason on stderr. The CLI continues past files it cannot read, so the files that did work are still written to `--out`.
 
 ## From python
 
@@ -175,9 +175,10 @@ Without the `if __name__ == "__main__":` guard (needed on macOS and Windows), `c
 ```shell
 indra-ocr-viewer --port 8765              # opens http://localhost:8765
 indra-ocr-viewer --no-browser             # print the URL, open nothing
+indra-ocr-viewer --threads 4              # cores for reading a page (default: 4)
 ```
 
-A local web viewer: drop in a PDF or an image, and each page shows its lines, layout blocks and reading order over the page, with the rendered markdown, the markdown source, the lines with their confidences, the JSON output and the time of each stage. The pipeline options (text layer or OCR, math, headers and footers, reading order, OCR of text inside images, dpi, page limit) are set in the page, and lines, blocks, block labels and reading order can each be shown or hidden. Files stay on your machine. Paste an image with `Ctrl+V` (`Cmd+V` on macOS) instead of dropping it: a screenshot on the clipboard is read like a dropped file. `--tesseract` lets the page compare with Tesseract (needs `pytesseract` and a Tesseract install). Over SSH, forward the port: `ssh -N -L 8765:localhost:8765 host` (with `--no-browser`, since the browser would open on the remote machine).
+A local web viewer: drop in a PDF or an image, and each page shows its lines, layout blocks and reading order over the page, with the rendered markdown, the markdown source, the lines with their confidences, the JSON output and the time of each stage. The pipeline options (text layer or OCR, math, headers and footers, reading order, OCR of text inside images, dpi, page limit) are set in the page, and lines, blocks, block labels and reading order can each be shown or hidden. Files stay on your machine. Paste an image with `Ctrl+V` (`Cmd+V` on macOS) instead of dropping it: a screenshot on the clipboard is read like a dropped file. `--tesseract` lets the page compare with Tesseract (needs `pytesseract` and a Tesseract install; `--tesseract-lang` picks the languages, default `eng`). Over SSH, forward the port: `ssh -N -L 8765:localhost:8765 host` (with `--no-browser`, since the browser would open on the remote machine).
 
 ### Paste from the clipboard
 
@@ -193,9 +194,11 @@ indra-ocr-desktop                         # a window, no browser tab
 indra-ocr-desktop report.pdf              # ... with that file opened and read
 indra-ocr-desktop --tray                  # keep running in the tray when closed
 indra-ocr-desktop --hotkey "ctrl+alt+o"   # show the window from anywhere
+indra-ocr-desktop --port 8899             # a fixed port (0, the default: any free one)
+indra-ocr-desktop --width 1400 --height 950
 ```
 
-The window is the viewer in the system webview (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux), served from a random localhost port. Models are looked for in this order: `--model-dir`, `INDRA_OCR_MODEL_DIR`, a `models/` folder beside the app, then a Hugging Face download.
+The window is the viewer in the system webview (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux), served from a localhost port the app picks unless you pass `--port`. `--threads` (default 4) is how many cores read one page; the size is `1280x920` unless `--width`/`--height` say otherwise. Models are looked for in this order: `--model-dir`, `INDRA_OCR_MODEL_DIR`, a `models/` folder beside the app, then a Hugging Face download.
 
 With a tray icon (the default when `pystray` is installed; `--no-tray` for off) closing the window hides it and the app keeps running: **Open** in the tray menu brings it back, **Quit** ends it. A global hotkey (`--hotkey`, default `ctrl+alt+o`, Windows) shows the window from any program; `--hotkey ""` disables it. `INDRA_OCR_DEBUG_PORT=9222` opens a DevTools port on the local page, to see what the window actually renders.
 
@@ -209,9 +212,10 @@ python packaging/build.py                 # -> dist/IndraOCR/ (about 350 MB)
 python packaging/build.py --console 0     # release build: no console window
 python packaging/build.py --models packaging/models   # reuse an already staged folder
 python packaging/build.py --console 0 --installer     # ... and a Windows setup .exe
+python packaging/build.py --skip-selftest             # skip the headless check (faster, less safe)
 ```
 
-The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows; on macOS the spec also builds `dist/IndraOCR.app`, the bundle a Finder user launches): that folder is what you ship. The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. The exe carries the icon (`packaging/make_icon.py` draws `packaging/indra_ocr.ico`) and a VERSIONINFO resource, so Explorer and Add/Remove Programs show a name and a version. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); the spec bundles pywebview's .NET assemblies on Windows, where the target machine needs the WebView2 runtime that Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
+The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows; on macOS the spec also builds `dist/IndraOCR.app`, the bundle a Finder user launches): that folder is what you ship. The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. The exe carries the icon (`packaging/make_icon.py` draws `packaging/indra_ocr.ico` and the macOS `packaging/indra_ocr.icns`) and a VERSIONINFO resource, so Explorer and Add/Remove Programs show a name and a version. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); the spec bundles pywebview's .NET assemblies on Windows, where the target machine needs the WebView2 runtime — Windows 11 ships it, Windows 10 gets it with Edge, and when it is missing the app says so in a dialog rather than showing an empty window. On Linux the window is WebKitGTK: the build machine needs PyGObject, GTK 3 and WebKit2GTK (`python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1`, or `4.0` on 22.04), which build.py finds in the system `dist-packages` and PyInstaller then bundles.
 
 ### Windows installer
 
@@ -244,16 +248,16 @@ Nothing is wrong with the file: it is the same build that [`.github/workflows/de
 
 ```powershell
 # PowerShell: prints the hash, compare with IndraOCR-<version>-setup.exe.sha256
-Get-FileHash .\IndraOCR-1.1.3-setup.exe -Algorithm SHA256
+Get-FileHash .\IndraOCR-1.1.4-setup.exe -Algorithm SHA256
 
 # or, no PowerShell:
-certutil -hashfile IndraOCR-1.1.3-setup.exe SHA256
+certutil -hashfile IndraOCR-1.1.4-setup.exe SHA256
 
 # or, with the .sha256 file in the same folder (prints True when they match):
-(Get-Content .\IndraOCR-1.1.3-setup.exe.sha256).Split(' ')[0] -eq (Get-FileHash .\IndraOCR-1.1.3-setup.exe -Algorithm SHA256).Hash.ToLower()
+(Get-Content .\IndraOCR-1.1.4-setup.exe.sha256).Split(' ')[0] -eq (Get-FileHash .\IndraOCR-1.1.4-setup.exe -Algorithm SHA256).Hash.ToLower()
 ```
 
-`sigcheck -h IndraOCR-1.1.3-setup.exe` from [Sysinternals](https://learn.microsoft.com/sysinternals/downloads/sigcheck) shows the same hash and "Unsigned".
+`sigcheck -h IndraOCR-1.1.4-setup.exe` from [Sysinternals](https://learn.microsoft.com/sysinternals/downloads/sigcheck) shows the same hash and "Unsigned".
 
 Inside one organisation, a build can be signed with a certificate the admins already trust, and then there is no prompt at all: `New-SelfSignedCertificate -Type CodeSigningCert` on a machine the domain trusts, or a certificate from the organisation's own CA, pushed to the other machines once (Group Policy → Trusted Root / Trusted Publishers), then signed with the same `signtool` line. A self-signed certificate that nobody trusts changes nothing for a stranger, which is why the public build ships a hash instead.
 
@@ -265,7 +269,7 @@ On macOS the spec builds a real bundle next to the one-folder build — `dist/In
 python packaging/build.py --console 0 --dmg
 ```
 
-That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 340 MB bundle compressed, so roughly the size of the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
+That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 340 MB bundle compresses to about 200 MB, against 160 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
 
 The app is not signed or notarised either, so Gatekeeper says "“Indra OCR” cannot be opened because Apple cannot check it for malicious software". To open it once: right-click the app → **Open** → **Open**. Or remove the quarantine flag the download carries:
 
@@ -273,7 +277,7 @@ The app is not signed or notarised either, so Gatekeeper says "“Indra OCR” c
 xattr -dr com.apple.quarantine /Applications/IndraOCR.app
 ```
 
-Check the download the same way as on Windows: `shasum -a 256 IndraOCR-1.1.3.dmg` against the `.sha256` file. To sign and notarise it (needs an Apple Developer account, a "Developer ID Application" certificate in the keychain, and an app-specific password or API key):
+Check the download the same way as on Windows: `shasum -a 256 IndraOCR-1.1.4.dmg` against the `.sha256` file. To sign and notarise it (needs an Apple Developer account, a "Developer ID Application" certificate in the keychain, and an app-specific password or API key):
 
 ```shell
 codesign --deep --force --options runtime --timestamp \
@@ -286,6 +290,28 @@ python packaging/build.py --dmg-only      # pack the signed, stapled app
 ```
 
 Sign before packing: the `.dmg` carries the bundle as it was, so `--dmg-only` packs the existing `dist/IndraOCR.app` instead of rebuilding over the signature.
+
+### Upgrading and uninstalling
+
+**Windows**: run the new `IndraOCR-<version>-setup.exe` over the installed copy. It carries the same application id, so it upgrades in place — no uninstall first, and the settings and `state.json` stay. To remove it, use **Settings → Apps → Indra OCR** (or `%LOCALAPPDATA%\Programs\IndraOCR\unins000.exe`): the program folder, both shortcuts, the uninstall entry, the `.pdf` association and `%LOCALAPPDATA%\IndraOCR` go; the PDFs you opened stay where they were.
+
+**macOS**: drag `IndraOCR.app` from the image into `/Applications`; a newer `.dmg` replaces it. Uninstall is dragging it to the Trash, plus `rm -rf ~/.local/state/IndraOCR` for the state file.
+
+**Linux**: the folder is the install, so delete it; the state file is `~/.local/state/IndraOCR/state.json` (`$XDG_STATE_HOME` when set).
+
+**pip**: `pip install -U indra-ocr` (`-U "indra-ocr[desktop]"` for the window). The models live in the Hugging Face cache, so an upgrade does not download them again.
+
+### Troubleshooting
+
+The app keeps one file about itself: `%LOCALAPPDATA%\IndraOCR\state.json` on Windows, `~/.local/state/IndraOCR/state.json` elsewhere, with the version, the first and last run, the model folder it used and whatever it found wrong. Start there.
+
+- **The window is empty or the app does not appear.** On Windows the WebView2 runtime is missing: install the [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/), then start the app again — it says so in a dialog when that check fails. On Linux the GTK half has to be there: `sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1` (`4.0` on 22.04) — the `.github/workflows/desktop.yml` bundle carries it, a bundle built without it does not. To see what the window actually renders, `INDRA_OCR_DEBUG_PORT=9222 indra-ocr-desktop`, then open `http://127.0.0.1:9222/json/list`.
+- **`cannot listen on 127.0.0.1:PORT: Address already in use`.** Another copy is running, or something else took the port you pinned with `--port`. Leave `--port` off (or pass `--port 0`) and the app picks a free one. A windowed build has no console, so this now arrives as a dialog instead of vanishing.
+- **A dialog says the models are missing.** It lists what it looked for. Point `--model-dir` or `INDRA_OCR_MODEL_DIR` at a folder with `det.onnx`, `rec.onnx`, `order.onnx` and `meta.json`, or copy a `models/` folder beside the executable — that is how an offline install is made.
+- **The first page is slow.** The models load on first use; after that a page takes tens of milliseconds (`--selftest` reports the machine's speed). `--cores`/`--threads` bound how many cores one page may use.
+- **A PDF opens elsewhere but not here.** If it is encrypted, pass `--password`; if it has no text layer, that is fine — it is OCR'd. A file with junk before the `%PDF` header is recovered rather than rejected.
+- **No tray icon, or the hotkey does nothing.** Both need `pystray` (`pip install "indra-ocr[desktop]"`). The hotkey is Windows-only and needs a combination nothing else holds: if another program took it, the app says which.
+- **The installer warns about an unknown publisher.** Expected: it is not code signed, and [Installing on Windows](#installing-on-windows) has the hash check and the exact clicks.
 
 ## Output
 

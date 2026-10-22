@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.4
+
+Same models (Hugging Face tag `v1.1.0`). The 1.1.3 tag stays as the snapshot CI
+built and verified; these are the fixes it turned up.
+
+- **A startup failure was invisible in the release build.** A windowed build has
+  no console, and the three ways the app can stop before showing anything — the
+  port is taken, the models are missing, no webview backend — wrote to `stderr`,
+  which PyInstaller sets to `None`. The process ended with no window and no word.
+  They now print when there is a console and show the same message in a dialog
+  when there is not (`desktop.say`, `desktop.fail`), the mechanism the first-run
+  check already used.
+- **A tag on a fork turned the `publish` job red.** PyPI's trusted publisher names
+  `datalab-to/indra`, so the exchange from any fork failed with
+  `invalid-publisher`; the tag looked broken when only the publisher was missing.
+  The job is now skipped unless the repository is upstream, while the `build` job
+  (tests, artifact check, version check) still runs everywhere.
+- **The Linux bundle had no window, and the build said it was fine.** The Linux
+  runner had no PyGObject, GTK 3 or WebKit2GTK, so PyInstaller logged
+  `Typelib file for namespace 'Gtk', version '3.0' not found`, left the GTK half
+  out, and the headless `--selftest` passed anyway. The workflow now installs
+  `python3-gi`, `gir1.2-gtk-3.0` and `gir1.2-webkit2-4.1` first, which also clears
+  pystray's `Namespace Gtk not available`.
+- **Docs**: the measured sizes (a 200 MB `.dmg`, a 160 MB setup), what Windows
+  and Linux actually need at run time, the flags that were only in `--help`
+  (`--port`, `--threads`, `--tesseract-lang`, `--width`, `--height`,
+  `--skip-selftest`), explicit exit codes, and two sections that were missing:
+  *Upgrading and uninstalling* and *Troubleshooting*.
+
 ## 1.1.3
 
 Same models (Hugging Face tag `v1.1.0`).
