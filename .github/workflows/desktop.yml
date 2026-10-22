@@ -27,6 +27,19 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install innosetup --no-progress -y
 
+      # The Linux window is pywebview's GTK backend, and PyGObject, GTK 3 and WebKit2GTK come from
+      # apt rather than pip. Without them the bundle still builds — the self test is headless — but
+      # it has no window to show, and PyInstaller reports "Typelib file for namespace 'Gtk' not
+      # found" and leaves the GTK half out. 4.1 is in Ubuntu 24.04, 4.0 in 22.04.
+      - name: GTK 3 and WebKit2GTK (Linux window)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 ||
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.0 libwebkit2gtk-4.0-37
+
       - name: Fetch the models into the cache
         run: python -c "from indra_ocr.models import model_dir; print(model_dir(math=True))"
 

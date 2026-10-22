@@ -4,6 +4,10 @@
 # No API token: PyPI trusts this repository and this workflow file (Trusted Publishing), and the
 # `id-token` permission below is how the job proves it. A manual run (workflow_dispatch) is a dry
 # run: it builds, tests and checks the artifacts, and does not publish.
+#
+# The trust is bound to datalab-to/indra, so the publish job is skipped anywhere else: a tag pushed
+# to a fork used to fail there with `invalid-publisher` and a red X, which says nothing about the
+# tag. The build job still runs everywhere, because it is the test suite and the artifact check.
 name: publish
 
 on:
@@ -72,8 +76,10 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    # Only a tag publishes; a manual run stops after build.
-    if: startsWith(github.ref, 'refs/tags/')
+    # Only a tag publishes; a manual run stops after build. And only upstream publishes: the PyPI
+    # trusted publisher names datalab-to/indra, so on a fork the exchange fails with
+    # `invalid-publisher` instead of quietly doing nothing.
+    if: startsWith(github.ref, 'refs/tags/') && github.repository == 'datalab-to/indra'
     # Must match the environment named in PyPI's trusted-publisher entry.
     environment: pypi
     permissions:
