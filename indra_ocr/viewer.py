@@ -23,9 +23,11 @@ import os
 import tempfile
 import threading
 import time
+import webbrowser
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 
 import numpy as np
 
@@ -91,6 +93,7 @@ class Engine:
         self.lock = threading.Lock()
         self.docs: dict[str, bytes] = {}
         self.pdfs: set[str] = set()  # the uploads that are PDFs, not images
+        self.preload: Path | None = None  # a file the app was started with
         self.tesseract = None
         if tesseract:
             import pytesseract
@@ -316,6 +319,24 @@ def make_handler(engine: Engine):
                     self._send(200, png, "image/png")
                 else:
                     self._send(204, b"", "text/plain")
+            elif self.path == "/preload":
+                # The file the desktop app was started with (a .pdf association or
+                # `IndraOCR.exe report.pdf`): the page asks for it on load, so a
+                # double-clicked document opens without a second click.
+                path = engine.preload
+                if path is None or not Path(path).is_file():
+                    self._send(204, b"", "text/plain")
+                else:
+                    data = Path(path).read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header(
+                        "X-Filename", quote(Path(path).name, safe="")
+                    )
+                    self.end_headers()
+                    self.wfile.write(data)
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -655,7 +676,22 @@ function render(p){const c=document.createElement('div');c.className='card';cons
  c.querySelectorAll('rect.ln').forEach(el=>{el.onmouseenter=()=>{hl(el.dataset.k);const r=c.querySelector(`.ln-row[data-k="${el.dataset.k}"]`);r&&r.scrollIntoView({block:'nearest'})};el.onmouseleave=()=>hl(-1)});
  c.querySelectorAll('rect.bk').forEach(el=>{el.onmouseenter=()=>el.classList.add('on');el.onmouseleave=()=>el.classList.remove('on')});
  $('#out').appendChild(c)}
+fetch('/preload').then(r=>r.status===200?r.blob().then(b=>({b,n:r.headers.get('X-Filename')||''})):null)
+ .then(x=>{if(!x||doc)return;let n='document';try{n=decodeURIComponent(x.n)||n}catch(e){}start(new File([x.b],n))})
+ .catch(()=>{});
 </script></body></html>"""
+
+
+def _open_browser(url: str) -> None:
+    """Open the viewer in the default browser.
+
+    A machine with no browser (a headless box, a webview-only install) has
+    nothing to open: that is not an error, the URL is printed either way.
+    """
+    try:
+        webbrowser.open(url)
+    except Exception:  # noqa: BLE001  (no DISPLAY, no handler for http, ...)
+        pass
 
 
 def main():
@@ -681,6 +717,11 @@ def _main():
     add_source_args(ap)
     ap.add_argument("--version", action="version", version=f"indra-ocr {__version__}")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="do not open the viewer in a browser (headless, or behind a tunnel)",
+    )
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument(
         "--dpi", type=float, default=200.0, help="initial PDF render resolution"
@@ -717,10 +758,11 @@ def _main():
             flush=True,
         )
         raise SystemExit(1) from None
-    print(
-        f"Indra OCR viewer on http://localhost:{a.port}  ({a.threads} threads)",
-        flush=True,
-    )
+    port = srv.server_address[1]  # --port 0 asks the system for a free one
+    url = f"http://localhost:{port}"
+    print(f"Indra OCR viewer on {url}  ({a.threads} threads)", flush=True)
+    if not a.no_browser:
+        _open_browser(url)
     srv.serve_forever()
 
 

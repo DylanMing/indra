@@ -20,6 +20,8 @@ PNG = base64.b64decode(
 class FakeEngine:
     """The handler only calls upload() and page(); no models needed here."""
 
+    preload = None
+
     def upload(self, data: bytes) -> dict:
         assert data.startswith(b"\x89PNG\r\n\x1a\n"), "the pasted bytes must arrive whole"
         return {"id": "abc123", "pages": 1}
@@ -158,6 +160,71 @@ def test_a_clipboard_failure_answers_instead_of_dropping_the_connection(monkeypa
         raw = _raw(srv.server_address[1], b"GET /clipboard HTTP/1.1\r\nHost: x\r\n\r\n")
         assert b" 400 " in raw.split(b"\r\n", 1)[0]
         assert b"clipboard is busy" in raw
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_the_viewer_opens_a_browser_unless_told_not_to(monkeypatch, capsys):
+    """`indra-ocr-viewer` printed the URL and left the user to paste it."""
+    import sys
+
+    import indra_ocr.viewer as v
+
+    opened = []
+    monkeypatch.setattr(v, "Engine", lambda *a, **k: object())
+    monkeypatch.setattr(v.webbrowser, "open", opened.append)
+
+    class FakeServer:
+        def __init__(self, addr, handler):
+            self.server_address = ("127.0.0.1", 8788)  # --port 0: the bound port
+
+        def serve_forever(self):
+            pass
+
+    monkeypatch.setattr(v, "LocalServer", FakeServer)
+    monkeypatch.setattr(sys, "argv", ["indra-ocr-viewer"])
+    v._main()
+    assert opened == ["http://localhost:8788"]
+    assert "http://localhost:8788" in capsys.readouterr().out
+
+    monkeypatch.setattr(sys, "argv", ["indra-ocr-viewer", "--no-browser"])
+    v._main()
+    assert opened == ["http://localhost:8788"], "no second window"
+
+
+def test_a_machine_with_no_browser_is_not_an_error(monkeypatch):
+    """A headless box has nothing to open: the URL is printed anyway."""
+    import indra_ocr.viewer as v
+
+    def boom(url):
+        raise Exception("no browser here")
+
+    monkeypatch.setattr(v.webbrowser, "open", boom)
+    v._open_browser("http://localhost:8788")  # does not raise
+
+
+def test_the_file_the_app_was_started_with_is_served_once(monkeypatch, tmp_path):
+    """`IndraOCR.exe report.pdf` (and a .pdf association): the page asks for the
+    bytes on load and uploads them itself."""
+    path = tmp_path / "报告 2026.pdf"
+    path.write_bytes(b"%PDF-1.4 test")
+    engine = FakeEngine()
+    engine.preload = path
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(engine))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        raw = _raw(srv.server_address[1], b"GET /preload HTTP/1.1\r\nHost: x\r\n\r\n")
+        head, _, body = raw.partition(b"\r\n\r\n")
+        assert b" 200 " in head.split(b"\r\n", 1)[0]
+        assert body == b"%PDF-1.4 test"
+        # the name goes in a header the page can decode (it is not ASCII)
+        assert b"X-Filename: %E6%8A%A5%E5%91%8A%202026.pdf" in head
+
+        engine.preload = None
+        raw = _raw(srv.server_address[1], b"GET /preload HTTP/1.1\r\nHost: x\r\n\r\n")
+        assert b" 204 " in raw.split(b"\r\n", 1)[0]
     finally:
         srv.shutdown()
         srv.server_close()

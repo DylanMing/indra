@@ -23,16 +23,56 @@ jobs:
       - name: Install the app and the packager
         run: pip install ".[desktop,build]"
 
+      - name: Install Inno Setup (Windows installer)
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
       - name: Fetch the models into the cache
         run: python -c "from indra_ocr.models import model_dir; print(model_dir(math=True))"
 
-      - name: Build and self-test
+      - name: Build, self-test and make the installer (Windows)
         # A release build: no console window behind the GUI. build.py still gates
         # on `--selftest`'s exit code, which needs no stdout.
+        if: runner.os == 'Windows'
+        run: python packaging/build.py --console 0 --installer
+
+      - name: Build and self-test
+        if: runner.os != 'Windows'
         run: python packaging/build.py --console 0
+
+      # Signing: the certificates are secrets, so these steps only run when one is
+      # configured (`secrets.WINDOWS_CERT` etc.). A signed exe and setup.exe stop
+      # SmartScreen from warning on first run.
+      # - name: Sign (Windows)
+      #   if: runner.os == 'Windows' && env.WINDOWS_CERT != ''
+      #   env:
+      #     WINDOWS_CERT: ${{ secrets.WINDOWS_CERT }}
+      #   run: |
+      #     echo "$env:WINDOWS_CERT" | certutil -decode -f - cert.pfx
+      #     signtool sign /f cert.pfx /p "${{ secrets.WINDOWS_CERT_PASSWORD }}" /fd sha256 `
+      #       /tr http://timestamp.digicert.com /td sha256 /a dist\IndraOCR\IndraOCR.exe
+      #     del cert.pfx
+
+      # - name: Sign the installer (Windows)
+      #   if: runner.os == 'Windows' && env.WINDOWS_CERT != ''
+      #   run: ... signtool ... dist\IndraOCR-*-setup.exe
+
+      # - name: Sign and notarise (macOS)
+      #   if: runner.os == 'macOS'
+      #   run: |
+      #     codesign --deep --force --options runtime --sign "Developer ID Application: ..." dist/IndraOCR.app
+      #     xcrun notarytool submit ... --wait
+      #     xcrun stapler staple dist/IndraOCR.app
 
       - uses: actions/upload-artifact@v4
         with:
           name: IndraOCR-${{ matrix.os }}
           path: dist/IndraOCR
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: IndraOCR-windows-setup
+          path: dist/IndraOCR-*-setup.exe
           if-no-files-found: error

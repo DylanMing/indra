@@ -19,7 +19,9 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from . import __version__
+from .health import first_run_problems, record_start, report
 from .models import ModelError
+from .tray import Hotkey, Tray
 from .viewer import Engine, LocalServer, make_handler
 
 TITLE = "Indra OCR"
@@ -118,11 +120,30 @@ def main(argv: list[str] | None = None) -> int:
         prog="indra-ocr-desktop",
         description="Indra OCR in a desktop window: paste a screenshot, drop a PDF.",
     )
+    ap.add_argument(
+        "file",
+        nargs="?",
+        type=Path,
+        help="a PDF or an image to open on start (what a .pdf association passes)",
+    )
     ap.add_argument("--model-dir", type=Path, default=None, help="folder with the models")
     ap.add_argument("--port", type=int, default=0, help="localhost port (0: pick a free one)")
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=920)
+    ap.add_argument(
+        "--tray",
+        dest="tray",
+        action="store_true",
+        default=None,
+        help="keep a tray icon and keep running when the window closes",
+    )
+    ap.add_argument("--no-tray", dest="tray", action="store_false")
+    ap.add_argument(
+        "--hotkey",
+        default="ctrl+alt+o",
+        help="global hotkey that shows the window (Windows; empty: none)",
+    )
     ap.add_argument(
         "--selftest", action="store_true", help="run the pipeline headless and exit"
     )
@@ -140,6 +161,18 @@ def main(argv: list[str] | None = None) -> int:
                 srv.shutdown()
                 srv.server_close()
         engine = Engine(models, a.threads, False, "eng", dict(DEFAULTS))
+        if a.file is not None:
+            # A file handed to us (a .pdf association, "Open with", a drag onto the
+            # exe): the page fetches it from /preload once and reads it.
+            path = a.file.expanduser().resolve()
+            if path.is_file():
+                engine.preload = path
+            else:
+                print(f"indra-ocr-desktop: {path}: no such file", file=sys.stderr)
+        problems = first_run_problems(models)
+        record_start(__version__, models, problems)
+        if problems:
+            report(problems)
         srv, url = serve(engine, a.port)
         print(f"{TITLE} on {url} (models: {models or 'Hugging Face cache'})", flush=True)
         try:
@@ -156,12 +189,67 @@ def main(argv: list[str] | None = None) -> int:
             webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
         except Exception:  # noqa: BLE001  (older pywebview)
             pass
-        webview.create_window(
+        debug_port = os.environ.get("INDRA_OCR_DEBUG_PORT", "")
+        if debug_port.isdigit():
+            # Support: a DevTools endpoint on the local page, to read what the
+            # window actually shows (WebView2's REMOTE_DEBUGGING_PORT setting).
+            try:
+                webview.settings["REMOTE_DEBUGGING_PORT"] = int(debug_port)
+            except Exception:  # noqa: BLE001
+                pass
+        window = webview.create_window(
             TITLE, url, width=a.width, height=a.height, min_size=(900, 640)
         )
+
+        state = {"quitting": False}
+
+        def show() -> None:
+            try:
+                window.show()
+                window.restore()  # a minimised or hidden window comes back
+            except Exception:  # noqa: BLE001  (the window is gone)
+                pass
+
+        def quit_app() -> None:
+            state["quitting"] = True
+            try:
+                window.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+
+        tray = None
+        if a.tray is not False:  # default: on, when pystray is available
+            tray = Tray(on_open=show, on_quit=quit_app)
+            if tray.start():
+                def on_closing() -> bool:
+                    if state["quitting"]:
+                        return True  # really closing: let it go
+                    window.hide()  # Closing the window keeps the app in the tray
+                    return False
+
+                window.events.closing += on_closing
+                print("tray icon on: closing the window keeps it running", flush=True)
+            else:
+                error = tray.error
+                tray = None
+                if a.tray:  # asked for explicitly: say why there is none
+                    print(f"indra-ocr-desktop: {error}", file=sys.stderr)
+
+        hotkey = None
+        if a.hotkey:
+            hotkey = Hotkey(a.hotkey, show)
+            if hotkey.start():
+                print(f"hotkey: {a.hotkey} shows the window", flush=True)
+            else:
+                print(f"indra-ocr-desktop: {hotkey.error}", file=sys.stderr)
+                hotkey = None
         try:
             webview.start()
         finally:
+            if hotkey is not None:
+                hotkey.stop()
+            if tray is not None:
+                tray.stop()
             srv.shutdown()
             srv.server_close()
         return 0

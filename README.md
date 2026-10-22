@@ -173,10 +173,11 @@ Without the `if __name__ == "__main__":` guard (needed on macOS and Windows), `c
 ## Viewer
 
 ```shell
-indra-ocr-viewer --port 8765              # open http://localhost:8765
+indra-ocr-viewer --port 8765              # opens http://localhost:8765
+indra-ocr-viewer --no-browser             # print the URL, open nothing
 ```
 
-A local web viewer: drop in a PDF or an image, and each page shows its lines, layout blocks and reading order over the page, with the rendered markdown, the markdown source, the lines with their confidences, the JSON output and the time of each stage. The pipeline options (text layer or OCR, math, headers and footers, reading order, OCR of text inside images, dpi, page limit) are set in the page, and lines, blocks, block labels and reading order can each be shown or hidden. Files stay on your machine. Paste an image with `Ctrl+V` (`Cmd+V` on macOS) instead of dropping it: a screenshot on the clipboard is read like a dropped file. `--tesseract` lets the page compare with Tesseract (needs `pytesseract` and a Tesseract install). Over SSH, forward the port: `ssh -N -L 8765:localhost:8765 host`.
+A local web viewer: drop in a PDF or an image, and each page shows its lines, layout blocks and reading order over the page, with the rendered markdown, the markdown source, the lines with their confidences, the JSON output and the time of each stage. The pipeline options (text layer or OCR, math, headers and footers, reading order, OCR of text inside images, dpi, page limit) are set in the page, and lines, blocks, block labels and reading order can each be shown or hidden. Files stay on your machine. Paste an image with `Ctrl+V` (`Cmd+V` on macOS) instead of dropping it: a screenshot on the clipboard is read like a dropped file. `--tesseract` lets the page compare with Tesseract (needs `pytesseract` and a Tesseract install). Over SSH, forward the port: `ssh -N -L 8765:localhost:8765 host` (with `--no-browser`, since the browser would open on the remote machine).
 
 ### Paste from the clipboard
 
@@ -187,22 +188,47 @@ Some webviews (WebKitGTK, which pywebview uses on Linux) do not pass clipboard f
 ## Desktop app
 
 ```shell
-pip install "indra-ocr[desktop]"          # pywebview and Pillow
+pip install "indra-ocr[desktop]"          # pywebview, Pillow, pystray
 indra-ocr-desktop                         # a window, no browser tab
+indra-ocr-desktop report.pdf              # ... with that file opened and read
+indra-ocr-desktop --tray                  # keep running in the tray when closed
+indra-ocr-desktop --hotkey "ctrl+alt+o"   # show the window from anywhere
 ```
 
 The window is the viewer in the system webview (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux), served from a random localhost port. Models are looked for in this order: `--model-dir`, `INDRA_OCR_MODEL_DIR`, a `models/` folder beside the app, then a Hugging Face download.
+
+With a tray icon (the default when `pystray` is installed; `--no-tray` for off) closing the window hides it and the app keeps running: **Open** in the tray menu brings it back, **Quit** ends it. A global hotkey (`--hotkey`, default `ctrl+alt+o`, Windows) shows the window from any program; `--hotkey ""` disables it. `INDRA_OCR_DEBUG_PORT=9222` opens a DevTools port on the local page, to see what the window actually renders.
+
+On start the app checks that the models are where it expects and, on Windows, that the WebView2 runtime is installed: a broken bundle says so in a dialog instead of failing on the first click. What it found is written to `%LOCALAPPDATA%\IndraOCR\state.json` (version, first and last run, problems), which is all the app writes about itself.
 
 To package it as a self-contained app (the models go inside, so it runs with no network and no Python install):
 
 ```shell
 pip install "indra-ocr[desktop,build]"    # adds PyInstaller
-python packaging/build.py                 # -> dist/IndraOCR/ (about 300 MB)
+python packaging/build.py                 # -> dist/IndraOCR/ (about 350 MB)
 python packaging/build.py --console 0     # release build: no console window
 python packaging/build.py --models packaging/models   # reuse an already staged folder
+python packaging/build.py --console 0 --installer     # ... and a Windows setup .exe
 ```
 
-The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows): that folder is what you ship. The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); the spec bundles pywebview's .NET assemblies on Windows, where the target machine needs the WebView2 runtime that Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
+The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows): that folder is what you ship. The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. The exe carries the icon (`packaging/make_icon.py` draws `packaging/indra_ocr.ico`) and a VERSIONINFO resource, so Explorer and Add/Remove Programs show a name and a version. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); the spec bundles pywebview's .NET assemblies on Windows, where the target machine needs the WebView2 runtime that Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
+
+### Windows installer
+
+`--installer` runs Inno Setup (`packaging/indra_ocr.iss`) after the build and writes `dist/IndraOCR-<version>-setup.exe`: about 160 MB, lzma2, English and Simplified Chinese. It installs per user (no admin prompt) into `%LOCALAPPDATA%\Programs\IndraOCR`, with a Start menu shortcut, an uninstall entry and, if the box is ticked, a `.pdf` association that starts the app on the double-clicked file. Needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`); `build.py` finds `ISCC.exe` on the path or in the usual install folders.
+
+```shell
+python packaging/build.py --console 0 --installer
+```
+
+The installer is not code signed: Windows SmartScreen warns on first run. To sign it, add an Authenticode certificate on the build machine:
+
+```shell
+signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a dist\IndraOCR-<version>-setup.exe
+signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a dist\IndraOCR\IndraOCR.exe
+```
+
+macOS (`codesign --deep --options runtime --sign "Developer ID Application: ..."` plus `xcrun notarytool submit`) and Linux (AppImage, and `.deb` with `dpkg-deb`) are the same shape: build on the platform, sign what the platform checks, ship the result. `.github/workflows/desktop.yml` builds and tests all three; the signing steps are commented out there, where the certificates would be secrets.
 
 ## Output
 

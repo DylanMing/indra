@@ -101,6 +101,41 @@ Same models (Hugging Face tag `v1.1.0`).
   pages; the CLI passed that on as "cannot open the PDF". It says "the PDF has no
   pages" now. The parallel reader and `Converter` share one `document.open_pdf`,
   which also stopped the message from differing between `--cores 1` and the pool.
+- **`indra-ocr-viewer` printed a URL and left the user to paste it.** It opens the
+  default browser now, and prints the port it actually bound (so `--port 0` shows
+  the real one). `--no-browser` keeps the old behaviour for a headless box or an
+  SSH tunnel, where a browser on the far side is useless.
+- **The desktop app could not be given a file.** `IndraOCR.exe report.pdf` (what a
+  `.pdf` association passes) now opens and reads that file: the window fetches it
+  from the local server once (`GET /preload`, the name in `X-Filename`) and runs
+  the page as if it had been dropped. A path that does not exist says so and the
+  app still starts.
+- **The app had no tray, no hotkey, and no first-run check.**
+  - Closing the window hid it for good: there was no way back except restarting.
+    With `pystray` installed (in `.[desktop]`) the app keeps a tray icon, closing
+    the window hides it and the tray's **Open**/**Quit** control it;
+    `--tray`/`--no-tray` forces the choice.
+  - `--hotkey "ctrl+alt+o"` (the default; `""` for none) shows the window from any
+    program, through `RegisterHotKey` in its own thread. A hotkey another program
+    already holds is reported, not silently lost.
+  - A bundle without its models, or a Windows box without the WebView2 runtime,
+    now says so in a dialog on start instead of failing on the first click. What
+    the check found goes into `%LOCALAPPDATA%\IndraOCR\state.json` (version, first
+    and last run, problems). `INDRA_OCR_DEBUG_PORT=9222` opens a DevTools port on
+    the page, to see what the window really renders.
+- **The Windows build had no icon, no version, and no installer.** `build.py` now
+  stamps a VERSIONINFO resource (`FileVersion` from `indra_ocr.__version__`, so
+  Explorer and Add/Remove Programs show "Indra OCR 1.1.3") and the icon drawn by
+  `packaging/make_icon.py` (7 sizes, 16-256, no font needed). `--installer`
+  compiles `packaging/indra_ocr.iss` with Inno Setup into
+  `dist/IndraOCR-1.1.3-setup.exe` (164 MB, lzma2, English and Chinese): a per-user
+  install into `%LOCALAPPDATA%\Programs\IndraOCR` with a Start menu shortcut, an
+  uninstall entry and an optional `.pdf` association. `desktop.yml` builds it on
+  `windows-latest` and uploads it next to the folder; the signing steps are there,
+  commented, waiting for a certificate.
+- **The version was 1.1.2 while `CHANGELOG.md` had a 1.1.3 section.** `pyproject`
+  and `indra_ocr.__version__` say 1.1.3, which is also what the exe and the
+  installer now report.
 
 ## 1.1.2
 

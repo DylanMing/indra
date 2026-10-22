@@ -45,7 +45,17 @@ elif sys.platform == "linux":
 if MODELS.is_dir():
     datas.append((str(MODELS), "models"))
 
+# The tray icon imports pystray and Pillow inside a function (so the app still
+# starts without them), which static analysis cannot see.
+hiddenimports += ["pystray", "PIL.Image", "PIL.ImageDraw"]
+if sys.platform == "win32":
+    hiddenimports += ["pystray._win32"]
+
 CONSOLE = os.environ.get("INDRA_CONSOLE", "1") != "0"
+# build.py writes these: the app icon and the VERSIONINFO resource (so the exe
+# shows a name and a version in Explorer and in Add/Remove Programs).
+ICON = os.environ.get("INDRA_ICON") or None
+VERSION_FILE = os.environ.get("INDRA_VERSION_FILE") or None
 
 a = Analysis(
     [str(ROOT / "packaging" / "entry_desktop.py")],
@@ -89,6 +99,8 @@ exe = EXE(
     strip=False,
     upx=False,
     console=CONSOLE,
+    icon=ICON,
+    version=VERSION_FILE,
 )
 
 coll = COLLECT(

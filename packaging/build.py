@@ -4,10 +4,14 @@
     python packaging/build.py                  # models from the local HF cache
     python packaging/build.py --models DIR     # or from a folder copied earlier
     python packaging/build.py --console 0      # release: no console window
+    python packaging/build.py --installer      # ... and a Windows setup .exe
 
 The build lands in ``dist/IndraOCR/`` and is checked with ``--selftest`` (the
 whole pipeline, headless, against the models inside the build), so a broken
-bundle fails here rather than on a user's machine.
+bundle fails here rather than on a user's machine.  On Windows ``--installer``
+then compiles ``packaging/indra_ocr.iss`` with Inno Setup into
+``dist/IndraOCR-<version>-setup.exe``: a per-user install with a Start menu
+shortcut, an uninstall entry and an optional .pdf association.
 """
 
 from __future__ import annotations
@@ -22,6 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "packaging" / "indra_ocr.spec"
 MODELS = ROOT / "packaging" / "models"
+ICON = ROOT / "packaging" / "indra_ocr.ico"
+ISS = ROOT / "packaging" / "indra_ocr.iss"
 APP = "IndraOCR"
 
 # Everything model_dir(math=True) promises: the recognizers and the math models.
@@ -59,6 +65,77 @@ def stage_models(src: Path) -> Path:
     return MODELS
 
 
+def write_version_info(version: str, out: Path | None = None) -> Path:
+    """The VERSIONINFO resource PyInstaller stamps into the exe.
+
+    Without it Explorer shows no name and no version, and Add/Remove Programs
+    lists the app as "IndraOCR" with a blank version.
+    """
+    parts = [int(p) for p in (version.split("+")[0].split(".") + ["0", "0", "0"])[:4]]
+    dotted = ".".join(str(p) for p in parts)
+    out = out or ROOT / "build" / "version_info.txt"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        f"""VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={tuple(parts)}, prodvers={tuple(parts)},
+    mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([StringTable('040904B0', [
+      StringStruct('CompanyName', 'Indra OCR'),
+      StringStruct('FileDescription', 'Indra OCR - local OCR desktop app'),
+      StringStruct('FileVersion', '{dotted}'),
+      StringStruct('InternalName', 'IndraOCR'),
+      StringStruct('LegalCopyright', 'Apache-2.0'),
+      StringStruct('OriginalFilename', 'IndraOCR.exe'),
+      StringStruct('ProductName', 'Indra OCR'),
+      StringStruct('ProductVersion', '{dotted}')])]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])])
+""",
+        encoding="utf-8",
+    )
+    return out
+
+
+def find_iscc() -> Path | None:
+    """Inno Setup's command-line compiler, from PATH or the usual install spots."""
+    found = shutil.which("iscc")
+    if found:
+        return Path(found)
+    for base in (
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs",
+        Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")),
+        Path(os.environ.get("ProgramFiles", "C:/Program Files")),
+    ):
+        for name in ("Inno Setup 6", "Inno Setup 5"):
+            candidate = base / name / "ISCC.exe"
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def build_installer(version: str, dist: Path) -> Path:
+    """Compile the Inno Setup script; returns the .exe it wrote."""
+    iscc = find_iscc()
+    if iscc is None:
+        raise SystemExit(
+            "Inno Setup is not installed: winget install JRSoftware.InnoSetup"
+        )
+    cmd = [
+        str(iscc),
+        f"/DAppVersion={version}",
+        f"/DSourceDir={dist}",
+        str(ISS),
+    ]
+    print(f"installer: {' '.join(cmd)}", flush=True)
+    subprocess.run(cmd, check=True)
+    setup = ROOT / "dist" / f"IndraOCR-{version}-setup.exe"
+    if not setup.is_file():
+        raise SystemExit(f"the installer was not written to {setup}")
+    print(f"installer {setup} ({setup.stat().st_size / 1e6:.0f} MB)", flush=True)
+    return setup
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -73,7 +150,14 @@ def main() -> int:
         help="1: keep the console window (development), 0: a release build",
     )
     ap.add_argument("--skip-selftest", action="store_true")
+    ap.add_argument(
+        "--installer",
+        action="store_true",
+        help="also build the Windows setup .exe with Inno Setup",
+    )
     a = ap.parse_args()
+
+    from indra_ocr import __version__
 
     src = a.models
     if src is None:
@@ -84,7 +168,13 @@ def main() -> int:
     staged = stage_models(src)
     print(f"staged {len(list(staged.iterdir()))} files in {staged}", flush=True)
 
-    env = dict(os.environ, INDRA_CONSOLE=a.console)
+    version_file = write_version_info(__version__)
+    env = dict(
+        os.environ,
+        INDRA_CONSOLE=a.console,
+        INDRA_VERSION_FILE=str(version_file),
+        INDRA_ICON=str(ICON) if ICON.is_file() else "",
+    )
     # On Linux the webview backend is gi/GTK from the system, not from the venv:
     # let PyInstaller find it, so a Linux bundle opens a window too.
     try:
@@ -125,6 +215,11 @@ def main() -> int:
         if r.returncode != 0:
             print("self test FAILED", flush=True)
             return r.returncode
+
+    if a.installer:
+        if os.name != "nt":
+            raise SystemExit("--installer builds a Windows setup: run it on Windows")
+        build_installer(__version__, app)
     return 0
 
 
