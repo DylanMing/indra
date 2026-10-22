@@ -1,6 +1,7 @@
 """The desktop shell: where it finds the models, and the headless self test."""
 
 import base64
+import os
 
 import pytest
 
@@ -142,3 +143,63 @@ def test_a_busy_port_is_reported_and_exits_1(monkeypatch):
 
     assert desktop.main(["--port", "8899"]) == 1
     assert shown and "8899" in shown[0][0] and "already in use" in shown[0][0]
+
+
+def test_a_running_build_keeps_the_typelib_path_alone(monkeypatch):
+    # Only a frozen Linux build gets its typelib path extended.
+    monkeypatch.setenv("GI_TYPELIB_PATH", "/bundle/gi_typelibs")
+    desktop.system_typelibs()
+    assert os.environ["GI_TYPELIB_PATH"] == "/bundle/gi_typelibs"
+
+
+def test_a_frozen_linux_build_adds_the_system_typelibs(monkeypatch, tmp_path):
+    # The bundle carries GTK, not WebKit2GTK: the window comes from the host, so
+    # the host's typelib folders have to stay reachable.
+    host = tmp_path / "girepository-1.0"
+    host.mkdir()
+    monkeypatch.setattr(desktop.sys, "platform", "linux")
+    monkeypatch.setattr(desktop.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(desktop, "TYPELIB_DIRS", ("/definitely/not/here", str(host)))
+    monkeypatch.setenv("GI_TYPELIB_PATH", "/bundle/gi_typelibs")
+
+    desktop.system_typelibs()
+
+    parts = os.environ["GI_TYPELIB_PATH"].split(os.pathsep)
+    assert parts == ["/bundle/gi_typelibs", str(host)]
+
+
+def test_window_test_closes_the_window(capsys):
+    class Window:
+        destroyed = False
+
+        def destroy(self):
+            self.destroyed = True
+
+    class Webview:
+        guilib = "gtk"
+        window = Window()
+
+        def create_window(self, *a, **k):
+            return self.window
+
+        def start(self, callback=None):
+            callback()
+
+    assert desktop.window_test(Webview(), "http://127.0.0.1:1") == 0
+    assert Webview.window.destroyed is True
+    assert "window test OK" in capsys.readouterr().out
+
+
+def test_window_test_fails_when_the_window_cannot_start(monkeypatch):
+    shown = []
+    monkeypatch.setattr(desktop, "report", lambda problems: shown.append(problems))
+    monkeypatch.setattr(desktop.sys, "stderr", None)
+
+    class Webview:
+        guilib = "gtk"
+
+        def create_window(self, *a, **k):
+            raise RuntimeError("could not open display")
+
+    assert desktop.window_test(Webview(), "http://127.0.0.1:1") == 1
+    assert shown and "could not open display" in shown[0][0]

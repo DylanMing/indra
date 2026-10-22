@@ -57,6 +57,19 @@ jobs:
         if: runner.os == 'Linux'
         run: python packaging/build.py --console 0
 
+      # --selftest is headless, so it cannot see a missing GTK or WebKit2: a Linux
+      # bundle with no window shipped that way. xvfb gives the real window a
+      # display, the app closes it again and exits non-zero if it never opened.
+      - name: The window really opens (Linux)
+        if: runner.os == 'Linux'
+        env:
+          GDK_BACKEND: x11
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb
+          xvfb-run -a --server-args="-screen 0 1280x1024x24" \
+            dist/IndraOCR/IndraOCR --windowtest
+
       # Signing: the certificates are secrets, so these steps only run when one is
       # configured (`secrets.WINDOWS_CERT` etc.). A signed exe and setup.exe stop
       # SmartScreen from warning on first run.

@@ -55,6 +55,31 @@ def fail(message: str) -> int:
     return 1
 
 
+TYPELIB_DIRS = (
+    "/usr/lib/x86_64-linux-gnu/girepository-1.0",
+    "/usr/lib/aarch64-linux-gnu/girepository-1.0",
+    "/usr/lib/girepository-1.0",
+    "/usr/local/lib/girepository-1.0",
+)
+
+
+def system_typelibs() -> None:
+    """Let a bundled Linux build see the typelibs the host provides.
+
+    PyInstaller's GI runtime hook sets ``GI_TYPELIB_PATH`` to the bundled
+    ``gi_typelibs`` and nothing else. The bundle carries GTK 3, but not
+    WebKit2GTK — that is a browser engine with helper processes of its own, not
+    something to bundle by accident — so on Linux the window comes from the
+    system's ``libwebkit2gtk``. Appending the system folders is what makes the
+    GTK backend find it; without this the window cannot open on any machine.
+    """
+    if not sys.platform.startswith("linux") or not getattr(sys, "frozen", False):
+        return
+    path = [p for p in os.environ.get("GI_TYPELIB_PATH", "").split(os.pathsep) if p]
+    path += [p for p in TYPELIB_DIRS if os.path.isdir(p) and p not in path]
+    os.environ["GI_TYPELIB_PATH"] = os.pathsep.join(path)
+
+
 def _app_dir() -> Path:
     """The folder the app runs from: the executable's folder when frozen."""
     if getattr(sys, "frozen", False):
@@ -133,6 +158,36 @@ def selftest(url: str) -> int:
     return 0 if lines else 1
 
 
+def window_test(webview, url: str) -> int:
+    """Open the real window, prove it came up, close it, exit.
+
+    What CI runs under xvfb: ``--selftest`` is headless, so a bundle whose GTK or
+    WebKit2 half is missing passes it and then has no window for a user. A GUI
+    that hangs instead of failing is why the watchdog exits by itself.
+    """
+    window = None
+    state = {"open": False}
+    watchdog = threading.Timer(60.0, os._exit, [3])  # a stuck GUI must not hang CI
+    watchdog.daemon = True
+    try:
+        window = webview.create_window(TITLE, url, width=800, height=600)
+
+        def close() -> None:
+            state["open"] = True
+            window.destroy()  # lets webview.start() return
+
+        watchdog.start()
+        webview.start(close)
+    except Exception as e:  # noqa: BLE001  (no display, no GTK, no WebKit2)
+        return fail(f"the window could not start ({type(e).__name__}: {e})")
+    finally:
+        watchdog.cancel()
+    if not state["open"]:
+        return fail("the window did not open")
+    print(f"window test OK: {TITLE} on the {webview.guilib} backend", flush=True)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="indra-ocr-desktop",
@@ -165,9 +220,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--selftest", action="store_true", help="run the pipeline headless and exit"
     )
+    ap.add_argument(
+        "--windowtest",
+        action="store_true",
+        help="open the window, then close it (CI, under xvfb)",
+    )
     ap.add_argument("--version", action="version", version=f"indra-ocr {__version__}")
     a = ap.parse_args(argv)
 
+    system_typelibs()
     models = resolve_models(a.model_dir)
     try:
         if a.selftest:
@@ -201,6 +262,15 @@ def main(argv: list[str] | None = None) -> int:
                 f"no desktop backend ({type(e).__name__}: {e}). "
                 f"Install one with pip install pywebview, or open {url} in a browser."
             )
+        if a.windowtest:
+            # CI, under xvfb: build the real window and close it again. The headless
+            # --selftest cannot see a missing GTK or WebKit2, and that is exactly how
+            # a Linux bundle without a window got shipped once.
+            try:
+                return window_test(webview, url)
+            finally:
+                srv.shutdown()
+                srv.server_close()
         try:
             webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
         except Exception:  # noqa: BLE001  (older pywebview)

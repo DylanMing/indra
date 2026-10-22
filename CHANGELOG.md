@@ -23,11 +23,22 @@ built and verified; these are the fixes it turned up.
   out, and the headless `--selftest` passed anyway. The workflow now installs
   `python3-gi`, `gir1.2-gtk-3.0` and `gir1.2-webkit2-4.1` first, which also clears
   pystray's `Namespace Gtk not available`.
+- **... and GTK alone was still not a window.** PyInstaller's GI runtime hook sets
+  `GI_TYPELIB_PATH` to the bundled `gi_typelibs` and nothing else, while the bundle
+  holds GTK but not WebKit2GTK: `gi.require_version("WebKit2", ...)` could not
+  resolve, so the GTK backend had no webview. `desktop.system_typelibs()` now
+  appends the system typelib folders to that path for a frozen Linux build, so the
+  window comes from the host's `libwebkit2gtk` and the rest stays bundled.
+- **Neither CI job could have caught it.** `--selftest` is headless by design, so a
+  bundle with no window passed. `--windowtest` opens the real window, closes it and
+  reports the backend, and the workflow runs it under `xvfb` on Linux: a bundle
+  that cannot build a webview now fails the build.
 - **Docs**: the measured sizes (a 200 MB `.dmg`, a 160 MB setup), what Windows
-  and Linux actually need at run time, the flags that were only in `--help`
-  (`--port`, `--threads`, `--tesseract-lang`, `--width`, `--height`,
-  `--skip-selftest`), explicit exit codes, and two sections that were missing:
-  *Upgrading and uninstalling* and *Troubleshooting*.
+  and Linux actually need at run time (WebView2; `libwebkit2gtk` beside the bundled
+  GTK), the flags that were only in `--help` (`--port`, `--threads`,
+  `--tesseract-lang`, `--width`, `--height`, `--skip-selftest`), explicit exit
+  codes, and two sections that were missing: *Upgrading and uninstalling* and
+  *Troubleshooting*.
 
 ## 1.1.3
 
