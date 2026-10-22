@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Draw ``packaging/indra_ocr.ico`` (the app icon) with Pillow.
+"""Draw ``packaging/indra_ocr.ico`` and ``.icns`` (the app icon) with Pillow.
 
     python packaging/make_icon.py
 
 One rounded square, a white page and four text lines, the last one in cyan: the
-line being read.  Drawn large and downsampled, so 16 px stays legible.
+line being read.  Drawn large and downsampled, so 16 px stays legible.  The .ico
+is for Windows (the exe and the setup), the .icns for the macOS .app bundle.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent / "indra_ocr.ico"
+ICNS = OUT.with_suffix(".icns")
 SIZES = [(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (24, 24), (16, 16)]
 N = 1024
 
@@ -56,11 +58,17 @@ def main() -> None:
         draw.rounded_rectangle((x0, y0 - 17, x1, y1 + 17), radius=17, fill=col)
 
     base.save(OUT, sizes=SIZES)
+    # Pillow writes the macOS sizes (16..1024) from the 1024 canvas, so the .app
+    # bundle gets a Retina icon without iconutil or a Mac in the loop.
+    base.save(ICNS)
     previews = Path(tempfile.gettempdir()) / "indra-icon"  # to look at, not committed
     previews.mkdir(exist_ok=True)
     for w, h in SIZES:
         base.resize((w, h), Image.LANCZOS).save(previews / f"icon-{w}.png")
-    print(f"wrote {OUT} ({OUT.stat().st_size / 1024:.1f} kB); previews in {previews}")
+    print(
+        f"wrote {OUT} ({OUT.stat().st_size / 1024:.1f} kB) and "
+        f"{ICNS.name} ({ICNS.stat().st_size / 1024:.1f} kB); previews in {previews}"
+    )
 
 
 if __name__ == "__main__":

@@ -55,6 +55,8 @@ CONSOLE = os.environ.get("INDRA_CONSOLE", "1") != "0"
 # build.py writes these: the app icon and the VERSIONINFO resource (so the exe
 # shows a name and a version in Explorer and in Add/Remove Programs).
 ICON = os.environ.get("INDRA_ICON") or None
+ICNS = os.environ.get("INDRA_ICNS") or None
+VERSION = os.environ.get("INDRA_VERSION") or "0.0.0"
 VERSION_FILE = os.environ.get("INDRA_VERSION_FILE") or None
 
 a = Analysis(
@@ -111,3 +113,26 @@ coll = COLLECT(
     upx=False,
     name="IndraOCR",
 )
+
+# macOS: a real .app bundle, which is what Finder launches and what a .dmg
+# contains.  The one-folder build above stays next to it, for --selftest and for
+# anyone who would rather run the executable.
+if sys.platform == "darwin":
+    app = BUNDLE(
+        coll,
+        name="IndraOCR.app",
+        icon=ICNS or ICON,
+        bundle_identifier="to.indra.ocr",
+        version=VERSION,
+        info_plist={
+            "CFBundleName": "Indra OCR",
+            "CFBundleDisplayName": "Indra OCR",
+            "CFBundleShortVersionString": VERSION,
+            "CFBundleVersion": VERSION,
+            "CFBundleInfoDictionaryVersion": "6.0",
+            "LSMinimumSystemVersion": "11.0",
+            "NSHighResolutionCapable": True,
+            "NSRequiresAquaSystemAppearance": False,
+            "NSHumanReadableCopyright": "Apache-2.0",
+        },
+    )

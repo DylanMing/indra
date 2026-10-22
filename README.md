@@ -211,7 +211,7 @@ python packaging/build.py --models packaging/models   # reuse an already staged 
 python packaging/build.py --console 0 --installer     # ... and a Windows setup .exe
 ```
 
-The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows): that folder is what you ship. The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. The exe carries the icon (`packaging/make_icon.py` draws `packaging/indra_ocr.ico`) and a VERSIONINFO resource, so Explorer and Add/Remove Programs show a name and a version. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); the spec bundles pywebview's .NET assemblies on Windows, where the target machine needs the WebView2 runtime that Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
+The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows; on macOS the spec also builds `dist/IndraOCR.app`, the bundle a Finder user launches): that folder is what you ship. The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. The exe carries the icon (`packaging/make_icon.py` draws `packaging/indra_ocr.ico`) and a VERSIONINFO resource, so Explorer and Add/Remove Programs show a name and a version. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); the spec bundles pywebview's .NET assemblies on Windows, where the target machine needs the WebView2 runtime that Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
 
 ### Windows installer
 
@@ -256,6 +256,36 @@ certutil -hashfile IndraOCR-1.1.3-setup.exe SHA256
 `sigcheck -h IndraOCR-1.1.3-setup.exe` from [Sysinternals](https://learn.microsoft.com/sysinternals/downloads/sigcheck) shows the same hash and "Unsigned".
 
 Inside one organisation, a build can be signed with a certificate the admins already trust, and then there is no prompt at all: `New-SelfSignedCertificate -Type CodeSigningCert` on a machine the domain trusts, or a certificate from the organisation's own CA, pushed to the other machines once (Group Policy → Trusted Root / Trusted Publishers), then signed with the same `signtool` line. A self-signed certificate that nobody trusts changes nothing for a stranger, which is why the public build ships a hash instead.
+
+### macOS app and .dmg
+
+On macOS the spec builds a real bundle next to the one-folder build — `dist/IndraOCR.app`, with `Info.plist` (name, version, `LSMinimumSystemVersion` 11.0, Retina) and the icon from `packaging/indra_ocr.icns` that `make_icon.py` draws — and `--dmg` packs it:
+
+```shell
+python packaging/build.py --console 0 --dmg
+```
+
+That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 340 MB bundle compressed, so roughly the size of the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
+
+The app is not signed or notarised either, so Gatekeeper says "“Indra OCR” cannot be opened because Apple cannot check it for malicious software". To open it once: right-click the app → **Open** → **Open**. Or remove the quarantine flag the download carries:
+
+```shell
+xattr -dr com.apple.quarantine /Applications/IndraOCR.app
+```
+
+Check the download the same way as on Windows: `shasum -a 256 IndraOCR-1.1.3.dmg` against the `.sha256` file. To sign and notarise it (needs an Apple Developer account, a "Developer ID Application" certificate in the keychain, and an app-specific password or API key):
+
+```shell
+codesign --deep --force --options runtime --timestamp \
+  --sign "Developer ID Application: Your Name (TEAMID)" dist/IndraOCR.app
+ditto -c -k --keepParent dist/IndraOCR.app IndraOCR.zip     # notarytool wants a zip
+xcrun notarytool submit IndraOCR.zip --apple-id you@example.com \
+  --team-id TEAMID --password "$APP_PASSWORD" --wait
+xcrun stapler staple dist/IndraOCR.app
+python packaging/build.py --dmg-only      # pack the signed, stapled app
+```
+
+Sign before packing: the `.dmg` carries the bundle as it was, so `--dmg-only` packs the existing `dist/IndraOCR.app` instead of rebuilding over the signature.
 
 ## Output
 

@@ -36,8 +36,12 @@ jobs:
         if: runner.os == 'Windows'
         run: python packaging/build.py --console 0 --installer
 
+      - name: Build, self-test and make the .dmg (macOS)
+        if: runner.os == 'macOS'
+        run: python packaging/build.py --console 0 --dmg
+
       - name: Build and self-test
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
         run: python packaging/build.py --console 0
 
       # Signing: the certificates are secrets, so these steps only run when one is
@@ -65,6 +69,10 @@ jobs:
       #     xcrun stapler staple dist/IndraOCR.app
 
       - uses: actions/upload-artifact@v4
+        # The one-folder build: what Windows ships (beside its installer) and
+        # what Linux ships. On macOS the .dmg is the whole story, because an
+        # uploaded .app loses its executable bit and its signature.
+        if: runner.os != 'macOS'
         with:
           name: IndraOCR-${{ matrix.os }}
           path: dist/IndraOCR
@@ -76,4 +84,11 @@ jobs:
           name: IndraOCR-windows-setup
           # the setup and the .sha256 build.py writes beside it
           path: dist/IndraOCR-*-setup.exe*
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: IndraOCR-macos-dmg
+          path: dist/IndraOCR-*.dmg*
           if-no-files-found: error

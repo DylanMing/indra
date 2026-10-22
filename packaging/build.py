@@ -5,6 +5,7 @@
     python packaging/build.py --models DIR     # or from a folder copied earlier
     python packaging/build.py --console 0      # release: no console window
     python packaging/build.py --installer      # ... and a Windows setup .exe
+    python packaging/build.py --dmg            # ... or a macOS .dmg
 
 The build lands in ``dist/IndraOCR/`` and is checked with ``--selftest`` (the
 whole pipeline, headless, against the models inside the build), so a broken
@@ -13,7 +14,9 @@ then compiles ``packaging/indra_ocr.iss`` with Inno Setup into
 ``dist/IndraOCR-<version>-setup.exe``: a per-user install with a Start menu
 shortcut, an uninstall entry and an optional .pdf association, with the SHA256
 written next to it (``.sha256``): the installer is not code signed, so that is
-what a user checks.
+what a user checks.  On macOS the spec also builds ``dist/IndraOCR.app`` and
+``--dmg`` packs it into ``dist/IndraOCR-<version>.dmg`` (the bundle and an
+/Applications link), likewise with its SHA256.
 """
 
 from __future__ import annotations
@@ -24,14 +27,17 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "packaging" / "indra_ocr.spec"
 MODELS = ROOT / "packaging" / "models"
 ICON = ROOT / "packaging" / "indra_ocr.ico"
+ICNS = ROOT / "packaging" / "indra_ocr.icns"
 ISS = ROOT / "packaging" / "indra_ocr.iss"
 APP = "IndraOCR"
+BUNDLE = "IndraOCR.app"
 
 # Everything model_dir(math=True) promises: the recognizers and the math models.
 NEEDED = (
@@ -161,7 +167,60 @@ def build_installer(version: str, dist: Path) -> Path:
     return setup
 
 
-def main() -> int:
+def stage_dmg_folder(app: Path, stage: Path) -> Path:
+    """What the mounted image shows: the bundle, and a link to /Applications.
+
+    Split out from build_dmg so the layout is testable without hdiutil.
+    """
+    shutil.copytree(app, stage / app.name, symlinks=True)
+    link = stage / "Applications"
+    if not link.is_symlink():
+        link.symlink_to("/Applications")
+    return stage
+
+
+def build_dmg(version: str, app: Path) -> Path:
+    """Wrap ``dist/IndraOCR.app`` in a .dmg: the disk image a Mac user mounts.
+
+    The image holds the bundle and a link to /Applications, so installing is a
+    drag.  UDZO (zlib) keeps the 350 MB bundle near 150 MB; it is not signed or
+    notarised here, see the README.
+    """
+    if sys.platform != "darwin":
+        raise SystemExit("--dmg packages a macOS app: run it on macOS")
+    hdiutil = shutil.which("hdiutil")
+    if hdiutil is None:
+        raise SystemExit("hdiutil not found: this is not a macOS build host")
+    if not app.is_dir():
+        raise SystemExit(f"nothing to pack: {app} was not built (BUNDLE is macOS only)")
+
+    out = ROOT / "dist" / f"IndraOCR-{version}.dmg"
+    with tempfile.TemporaryDirectory(prefix="indra_dmg_") as tmp:
+        stage = stage_dmg_folder(app, Path(tmp))
+        cmd = [
+            hdiutil,
+            "create",
+            "-volname",
+            f"Indra OCR {version}",
+            "-srcfolder",
+            str(stage),
+            "-fs",
+            "HFS+",
+            "-format",
+            "UDZO",
+            "-ov",
+            str(out),
+        ]
+        print(f"dmg: {' '.join(cmd)}", flush=True)
+        subprocess.run(cmd, check=True)
+    print(f"dmg {out} ({out.stat().st_size / 1e6:.0f} MB)", flush=True)
+    # A corrupt image that mounts empty is worth failing the build over.
+    subprocess.run([hdiutil, "verify", str(out)], check=True)
+    write_checksum(out)
+    return out
+
+
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         "--models",
@@ -180,9 +239,24 @@ def main() -> int:
         action="store_true",
         help="also build the Windows setup .exe with Inno Setup",
     )
-    a = ap.parse_args()
+    ap.add_argument(
+        "--dmg",
+        action="store_true",
+        help="also build the macOS .dmg around dist/IndraOCR.app",
+    )
+    ap.add_argument(
+        "--dmg-only",
+        action="store_true",
+        help="pack the existing dist/IndraOCR.app without rebuilding (sign it first)",
+    )
+    a = ap.parse_args(argv)
 
     from indra_ocr import __version__
+
+    if a.dmg_only:
+        # sign dist/IndraOCR.app, then this: the image carries the bundle as it is
+        build_dmg(__version__, ROOT / "dist" / BUNDLE)
+        return 0
 
     src = a.models
     if src is None:
@@ -197,8 +271,10 @@ def main() -> int:
     env = dict(
         os.environ,
         INDRA_CONSOLE=a.console,
+        INDRA_VERSION=__version__,
         INDRA_VERSION_FILE=str(version_file),
         INDRA_ICON=str(ICON) if ICON.is_file() else "",
+        INDRA_ICNS=str(ICNS) if ICNS.is_file() else "",
     )
     # On Linux the webview backend is gi/GTK from the system, not from the venv:
     # let PyInstaller find it, so a Linux bundle opens a window too.
@@ -245,6 +321,8 @@ def main() -> int:
         if os.name != "nt":
             raise SystemExit("--installer builds a Windows setup: run it on Windows")
         build_installer(__version__, app)
+    if a.dmg:
+        build_dmg(__version__, ROOT / "dist" / BUNDLE)
     return 0
 
 

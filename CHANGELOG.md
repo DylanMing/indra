@@ -145,6 +145,20 @@ Same models (Hugging Face tag `v1.1.0`).
   digest), `desktop.yml` uploads it with the installer, and the README's new
   *Installing on Windows* section says what the two prompts are, how to verify the
   hash, and how an organisation can sign its own build so that nobody sees them.
+- **macOS had no app bundle and nothing to install.** The macOS build stopped at
+  the one-folder output, which Finder cannot launch as an app; there was no
+  `Info.plist`, no icon and no disk image. The spec now builds
+  `dist/IndraOCR.app` on macOS (name, version, `LSMinimumSystemVersion` 11.0,
+  Retina, the icon from the new `packaging/indra_ocr.icns`, which `make_icon.py`
+  writes for the 16-512 @1x/2x set), and `build.py --dmg` packs it into
+  `dist/IndraOCR-<version>.dmg` (UDZO, HFS+) holding the bundle and an
+  `/Applications` link, verified with `hdiutil verify` and shipped with its
+  `.sha256`. `--dmg-only` packs the bundle that is already there, so the order can
+  be sign → notarise → staple → pack, which `--dmg`-after-build would undo. CI
+  builds and uploads the `.dmg` on `macos-latest`; it uploads no `.app`, because
+  an artifact download loses the executable bit. The README's *macOS app and .dmg*
+  section has the Gatekeeper steps for the unsigned build and the `codesign` +
+  `notarytool` + `stapler` lines for when there is a certificate.
 
 ## 1.1.2
 
