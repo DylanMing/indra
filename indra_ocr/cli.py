@@ -53,10 +53,34 @@ def _page_count(v: str) -> int:
     return n
 
 
+def _text_stdio() -> None:
+    """Make stdout and stderr able to carry a document.
+
+    A Windows console or pipe defaults to a legacy code page (cp936, cp1252)
+    that cannot encode everything a page holds: a bullet or a math sign raised
+    UnicodeEncodeError halfway through the output and lost the rest. Pipes and
+    files get UTF-8, so the bytes are exact whatever the reader does with them;
+    a console keeps its code page and replaces what it cannot show, because
+    writing UTF-8 to a cp936 console would turn Chinese into mojibake instead.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        enc = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
+        if enc in ("utf8", "utf8mb4"):
+            continue
+        try:
+            if getattr(stream, "isatty", lambda: False)():
+                stream.reconfigure(errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):  # pragma: no cover (captured streams)
+            pass
+
+
 def main(argv=None):
     """Exit code 0, or 1 when an input failed or the models are not available."""
     from .models import ModelError
 
+    _text_stdio()
     try:
         return _main(argv)
     except ModelError as e:
