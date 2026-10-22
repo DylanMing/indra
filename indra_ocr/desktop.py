@@ -37,6 +37,24 @@ DEFAULTS = {
 }
 
 
+def say(message: str) -> None:
+    """Tell the user something: on stderr when there is one, in a dialog when not.
+
+    A release build is windowed, so PyInstaller sets ``sys.stderr`` to None: a
+    port that is taken would otherwise end the process with no word at all.
+    """
+    if sys.stderr is not None:
+        print(f"indra-ocr-desktop: {message}", file=sys.stderr, flush=True)
+    else:
+        report([message])
+
+
+def fail(message: str) -> int:
+    """Report a startup failure and return the exit code."""
+    say(message)
+    return 1
+
+
 def _app_dir() -> Path:
     """The folder the app runs from: the executable's folder when frozen."""
     if getattr(sys, "frozen", False):
@@ -168,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
             if path.is_file():
                 engine.preload = path
             else:
-                print(f"indra-ocr-desktop: {path}: no such file", file=sys.stderr)
+                say(f"{path}: no such file")
         problems = first_run_problems(models)
         record_start(__version__, models, problems)
         if problems:
@@ -179,12 +197,10 @@ def main(argv: list[str] | None = None) -> int:
             import webview
         except Exception as e:  # noqa: BLE001  (no webview backend installed)
             srv.shutdown()
-            print(
-                f"indra-ocr-desktop: no desktop backend ({type(e).__name__}: {e}). "
-                f"Install one with pip install pywebview, or open {url} in a browser.",
-                file=sys.stderr,
+            return fail(
+                f"no desktop backend ({type(e).__name__}: {e}). "
+                f"Install one with pip install pywebview, or open {url} in a browser."
             )
-            return 1
         try:
             webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
         except Exception:  # noqa: BLE001  (older pywebview)
@@ -233,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
                 error = tray.error
                 tray = None
                 if a.tray:  # asked for explicitly: say why there is none
-                    print(f"indra-ocr-desktop: {error}", file=sys.stderr)
+                    say(str(error))
 
         hotkey = None
         if a.hotkey:
@@ -241,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
             if hotkey.start():
                 print(f"hotkey: {a.hotkey} shows the window", flush=True)
             else:
-                print(f"indra-ocr-desktop: {hotkey.error}", file=sys.stderr)
+                say(str(hotkey.error))
                 hotkey = None
         try:
             webview.start()
@@ -254,11 +270,9 @@ def main(argv: list[str] | None = None) -> int:
             srv.server_close()
         return 0
     except ModelError as e:
-        print(f"indra-ocr-desktop: {e}", flush=True)
-        return 1
+        return fail(str(e))
     except OSError as e:  # the port, or a temp folder, is not available
-        print(f"indra-ocr-desktop: {e}", flush=True)
-        return 1
+        return fail(str(e))
 
 
 if __name__ == "__main__":

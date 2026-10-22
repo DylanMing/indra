@@ -103,3 +103,42 @@ def test_clipboard_endpoint_says_when_there_is_no_image(monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_say_goes_to_stderr_when_there_is_one(capsys):
+    desktop.say("cannot listen on 127.0.0.1:8899")
+    assert "indra-ocr-desktop: cannot listen on 127.0.0.1:8899" in capsys.readouterr().err
+
+
+def test_say_shows_a_dialog_when_the_build_has_no_console(monkeypatch):
+    # A release build is windowed: PyInstaller sets sys.stderr to None, so a
+    # message there would be lost and the app would end without a word.
+    shown = []
+    monkeypatch.setattr(desktop, "report", lambda problems: shown.append(problems))
+    monkeypatch.setattr(desktop.sys, "stderr", None)
+
+    desktop.say("cannot listen on 127.0.0.1:8899")
+
+    assert shown == [["cannot listen on 127.0.0.1:8899"]]
+
+
+def test_a_busy_port_is_reported_and_exits_1(monkeypatch):
+    shown = []
+
+    class Engine:
+        def __init__(self, *a, **k):
+            pass
+
+    def busy(*a, **k):
+        raise OSError("cannot listen on 127.0.0.1:8899: Address already in use")
+
+    monkeypatch.setattr(desktop, "resolve_models", lambda explicit: None)
+    monkeypatch.setattr(desktop, "Engine", Engine)
+    monkeypatch.setattr(desktop, "first_run_problems", lambda models: [])
+    monkeypatch.setattr(desktop, "record_start", lambda *a: None)
+    monkeypatch.setattr(desktop, "serve", busy)
+    monkeypatch.setattr(desktop, "report", lambda problems: shown.append(problems))
+    monkeypatch.setattr(desktop.sys, "stderr", None)
+
+    assert desktop.main(["--port", "8899"]) == 1
+    assert shown and "8899" in shown[0][0] and "already in use" in shown[0][0]
