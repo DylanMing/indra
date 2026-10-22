@@ -12,6 +12,10 @@ Same models (Hugging Face tag `v1.1.0`).
   cached folder is now checked for the files the run needs, the download completes
   it, and a folder that still lacks them raises a `ModelError` naming them
   ([#18](https://github.com/datalab-to/indra/issues/18)).
+- **Paste a screenshot into the viewer.** `Ctrl+V` (`Cmd+V` on macOS) reads the
+  image on the clipboard through the same path as a dropped file, so a screenshot
+  can be OCR'd without saving it first. A copied PDF pastes too, where the
+  browser hands the file over.
 
 ## 1.1.2
 

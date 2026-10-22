@@ -486,7 +486,7 @@ footer{padding:18px 24px;border-top:var(--hairline) solid var(--rule);display:fl
 </div>
 <div class="wrap">
 <aside>
- <div><div id="drop"><b>Drop a PDF or an image</b><span>or click to choose a file</span><input id="file" type="file" accept=".pdf,image/*" hidden></div><div id="fname"></div></div>
+ <div><div id="drop"><b>Drop a PDF or an image</b><span>or click to choose a file, or paste with Ctrl+V</span><input id="file" type="file" accept=".pdf,image/*" hidden></div><div id="fname"></div></div>
  <div class="group"><div class="label">Source</div>
   <div class="seg" id="mode"><button data-v="auto">Auto</button><button data-v="ocr">OCR</button><button data-v="text">Text layer</button></div>
   <div class="hint" id="modehint"></div></div>
@@ -507,7 +507,7 @@ footer{padding:18px 24px;border-top:var(--hairline) solid var(--rule);display:fl
  <div class="group"><div class="label">Run</div><div id="status"></div><div id="stats"></div></div>
  <div class="callout">Need handwriting, math and tables at the highest accuracy? <a href="https://www.datalab.to/?utm_source=indra-viewer" target="_blank" rel="noopener">Chandra on Datalab</a> reads them, with $5 in free credits to start.</div>
 </aside>
-<main id="out"><div class="empty"><h2>Read a document</h2>Drop a PDF or an image on the left. Pages appear as they finish, with lines, layout blocks and reading order drawn over each page.</div></main>
+<main id="out"><div class="empty"><h2>Read a document</h2>Drop a PDF or an image on the left, or press Ctrl+V (Cmd+V) to read the image on your clipboard. Pages appear as they finish, with lines, layout blocks and reading order drawn over each page.</div></main>
 </div>
 <footer><span>Indra OCR · fast CPU OCR by <a href="https://www.datalab.to" target="_blank" rel="noopener">Datalab</a></span><span class="mono">Runs locally: your files stay on this machine.</span></footer>
 <script>
@@ -526,6 +526,14 @@ const drop=$('#drop'),file=$('#file');
 drop.onclick=()=>file.click();file.onchange=()=>file.files[0]&&start(file.files[0]);
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};drop.ondragleave=()=>drop.classList.remove('over');
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');e.dataTransfer.files[0]&&start(e.dataTransfer.files[0])};
+// Ctrl+V / Cmd+V: a pasted screenshot (or a copied PDF) takes the same path as a dropped file.
+const stamp=()=>new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+function pasted(cd){if(!cd)return null;
+ for(const it of cd.items||[]){if(it.kind==='file'&&/^(image\/|application\/pdf)/.test(it.type)){const b=it.getAsFile();if(b)return b.type==='application/pdf'?new File([b],`clipboard-${stamp()}.pdf`,{type:b.type}):new File([b],`clipboard-${stamp()}.png`,{type:b.type||'image/png'})}}
+ const f=[...(cd.files||[])][0];return f&&(/^(image\/|application\/pdf)/.test(f.type))?f:null}
+document.addEventListener('paste',e=>{const f=pasted(e.clipboardData);if(!f)return;e.preventDefault();
+ drop.classList.add('over');setTimeout(()=>drop.classList.remove('over'),600);
+ $('#status').textContent='Pasted '+f.name;start(f)});
 $('#rerun').onclick=()=>doc&&run();
 fetch('/info').then(r=>r.json()).then(i=>{$('#ver').textContent='v'+i.version;if(i.tesseract)$('#tesslab').hidden=false;const d=i.defaults||{};
  setMode(d.mode||'auto');$('#math').checked=!!d.math;$('#furniture').checked=!!d.furniture;$('#imageocr').checked=d.image_ocr!==false;
