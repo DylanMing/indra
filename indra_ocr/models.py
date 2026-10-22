@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -9,6 +10,17 @@ HF_REPO = "datalab-to/indra-ocr"
 # Model set this package version was built and tested against (a tag in HF_REPO).
 HF_REVISION = "v1.1.0"
 FILES = ("det.onnx", "rec.onnx", "order.onnx", "meta.json")
+
+
+def read_json(path: str | Path) -> dict:
+    """A model's metadata, as the UTF-8 file it is.
+
+    ``Path.read_text()`` without an encoding uses the locale's, which on a Chinese
+    or Japanese Windows is cp936/cp932: math_meta.json lists tokens such as ``°``,
+    ``–``, ``’`` and ``⁄``, so loading the math models raised UnicodeDecodeError
+    on Windows and ``--math`` never worked there.
+    """
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 class ModelError(OSError):

@@ -13,7 +13,6 @@ a page turned by a quarter or half turn is turned upright before detection
 
 from __future__ import annotations
 
-import json
 import re
 import time
 import unicodedata
@@ -27,6 +26,7 @@ from .det_post import decode, page_to_input
 from .layout_post import page_blocks, page_markdown
 from .line_mask import crop_lines, line_darkness
 from .math import MATH_MIN_CONF, MathReader
+from .models import read_json
 from .order_post import (
     BLOCK_CLASSES,
     GRID_LABELS,
@@ -321,7 +321,7 @@ class OrtOCR:
             if (onnx_dir / "orient.onnx").exists()
             else None
         )
-        meta = json.loads(Path(need("meta.json")).read_text())
+        meta = read_json(need("meta.json"))
         self.vocab = Vocab.from_json(meta["vocab"])
         # Scripts: a line classifier routes each line to its group's recognizer
         # (rec_<group>.onnx with meta["vocab_<group>"]), in script.onnx's class
@@ -996,17 +996,34 @@ class InputError(Exception):
     """A file that cannot be read: not a PDF or an image, corrupt, or locked."""
 
 
+def is_pdf_bytes(data: bytes) -> bool:
+    """The bytes say PDF (the header may follow a little junk)."""
+    return b"%PDF-" in data[:1024]
+
+
 def is_pdf(path: Path) -> bool:
     """The file's own bytes say PDF (the header may follow a little junk)."""
     with open(path, "rb") as f:
-        return b"%PDF-" in f.read(1024)
+        return is_pdf_bytes(f.read(1024))
 
 
 def read_images(path: Path) -> list[np.ndarray]:
-    """Grayscale pages of an image file; every frame of a multi-page TIFF."""
-    ok, frames = cv2.imreadmulti(str(path), flags=cv2.IMREAD_GRAYSCALE)
+    """Grayscale pages of an image file; every frame of a multi-page TIFF.
+
+    The bytes are read here rather than by ``cv2.imread``: that calls fopen with
+    the ANSI code page on Windows, so ``扫描件.png`` was reported as "not a PDF or
+    a readable image" instead of being read.  Reading and decoding are separate
+    steps, so any filename Python can open works.
+    """
+    try:
+        data = np.frombuffer(Path(path).read_bytes(), np.uint8)
+    except OSError as e:
+        raise InputError(f"{path}: {e.strerror or e}") from e
+    if data.size == 0:
+        raise InputError(f"{path}: not a PDF or a readable image")
+    ok, frames = cv2.imdecodemulti(data, cv2.IMREAD_GRAYSCALE)
     if not ok or not frames:
-        img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        img = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)
         frames = [img] if img is not None else []
     if not frames:
         raise InputError(f"{path}: not a PDF or a readable image")

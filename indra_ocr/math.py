@@ -11,12 +11,12 @@ math_enc.onnx, math_dec_init.onnx, math_dec_step.onnx and math_meta.json.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
 
 from .line_mask import crop_lines
+from .models import read_json
 from .rec_preproc import pad_batch, width_batches
 
 MATH_MIN = 0.5  # classifier probability above which a line is read as math
@@ -59,7 +59,7 @@ class MathReader:
         }
         self.cls, self.enc = s["mathcls.onnx"], s["math_enc.onnx"]
         self.init, self.step = s["math_dec_init.onnx"], s["math_dec_step.onnx"]
-        meta = json.loads((onnx_dir / "math_meta.json").read_text())
+        meta = read_json(onnx_dir / "math_meta.json")
         cfg = meta["config"]
         self.height = cfg["height"]
         self.max_tokens = cfg["max_tokens"]

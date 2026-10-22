@@ -52,6 +52,30 @@ def test_every_tiff_frame_is_a_page(tmp_path):
     assert len(read_images(path)) == 3
 
 
+def test_an_image_under_a_non_ascii_path_is_read(tmp_path):
+    # cv2.imread fopen()s with the ANSI code page on Windows: a Chinese filename
+    # came back as "not a PDF or a readable image".
+    from PIL import Image
+
+    folder = tmp_path / "扫描件"
+    folder.mkdir()
+    Image.new("L", (40, 30), 255).save(folder / "扫描.png")
+    assert len(read_images(folder / "扫描.png")) == 1
+
+
+def test_images_do_not_go_through_cv2_imread(monkeypatch, tmp_path):
+    from PIL import Image
+
+    def no(*a, **k):
+        raise AssertionError("cv2.imread/imreadmulti cannot open a non-ASCII path")
+
+    monkeypatch.setattr("cv2.imread", no)
+    monkeypatch.setattr("cv2.imreadmulti", no)
+    path = tmp_path / "x.png"
+    Image.new("L", (40, 30), 255).save(path)
+    assert len(read_images(path)) == 1
+
+
 def test_unreadable_files_raise_input_error(tmp_path):
     conv = Converter(StubOCR())
     for name, data in (
