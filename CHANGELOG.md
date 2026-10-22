@@ -20,7 +20,22 @@ Same models (Hugging Face tag `v1.1.0`).
 - **A desktop app.** `pip install "indra-ocr[desktop]"` and `indra-ocr-desktop`
   open the viewer in a native window; `packaging/build.py` builds a self-contained
   app with the models inside (no network, no Python install) and checks it with
-  a headless `--selftest`.
+  a headless `--selftest`. The bundle is built per platform (WebView2/Edge on
+  Windows, WKWebView on macOS, WebKitGTK on Linux).
+- **Windows.** The desktop app and the bundle were run on Windows 11 (x64): the
+  Edge backend, `Ctrl+V` in the page, the clipboard fallback (Pillow's
+  `ImageGrab`) and a 352 MB one-folder build that OCRs with its own models and an
+  empty Hugging Face cache. Two things only Windows showed:
+  - A console or pipe on Windows uses a legacy code page (cp936, cp1252), so one
+    character outside it (`•`, a math sign) raised `UnicodeEncodeError` and ended
+    the run with the rest of the document lost. Pipes now get UTF-8; a console
+    keeps its code page and replaces what it cannot show.
+  - A pasted screenshot was named after UTC, so at 16:40 in Shanghai it was
+    listed as `clipboard-...T08-40-24.png`; the name now carries local time.
+  - `packaging/indra_ocr.spec` bundles pywebview's .NET assemblies for the Edge
+    backend, and asks for PyGObject only on Linux; `pip install ".[desktop,build]"`
+    now brings PyInstaller, and `build.py --models packaging/models` no longer
+    empties the folder it copies from.
 
 ## 1.1.2
 

@@ -45,6 +45,11 @@ def stage_models(src: Path) -> Path:
         raise SystemExit(
             f"{src} is not a complete model folder: missing {', '.join(missing)}"
         )
+    if src == MODELS.resolve():
+        # --models packaging/models: already staged, and copying onto itself
+        # would empty the folder first.
+        print(f"models already staged in {MODELS}", flush=True)
+        return MODELS
     if MODELS.exists():
         shutil.rmtree(MODELS)
     MODELS.mkdir(parents=True)

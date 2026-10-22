@@ -13,9 +13,10 @@ Face cache.
 """
 
 import os
+import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 ROOT = Path(SPECPATH).parent
 MODELS = ROOT / "packaging" / "models"
@@ -30,12 +31,16 @@ for pkg in ("onnxruntime", "cv2", "pypdfium2_raw"):
 # pywebview picks its backend at runtime, so its platform modules are imported
 # lazily and no static analysis finds them.
 hiddenimports += collect_submodules("webview.platforms")
-# Windows only (pythonnet + WebView2); a warning on other platforms is expected.
-hiddenimports += ["clr"]
 
-# Linux: pywebview's GTK backend, when the system provides PyGObject (build.py
-# puts /usr/lib/python3/dist-packages on the path for the analysis).
-hiddenimports += ["gi", "gi.repository.Gtk", "gi.repository.WebKit2"]
+if sys.platform == "win32":
+    # The Edge backend is pythonnet + WebView2: it loads the .NET assemblies and
+    # the WebView2 loader from webview/lib at runtime, and imports clr by name.
+    hiddenimports += ["clr", "webview.platforms.edgechromium"]
+    datas += collect_data_files("webview")
+elif sys.platform == "linux":
+    # Linux: pywebview's GTK backend, when the system provides PyGObject (build.py
+    # puts /usr/lib/python3/dist-packages on the path for the analysis).
+    hiddenimports += ["gi", "gi.repository.Gtk", "gi.repository.WebKit2"]
 
 if MODELS.is_dir():
     datas.append((str(MODELS), "models"))

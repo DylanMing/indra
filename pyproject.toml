@@ -27,6 +27,7 @@ Issues = "https://github.com/datalab-to/indra/issues"
 
 [project.optional-dependencies]
 desktop = ["pywebview", "pillow"]
+build = ["pyinstaller"]
 tesseract = ["pytesseract"]
 test = ["pytest", "pillow", "pikepdf"]
 

@@ -90,7 +90,7 @@ The default models are about 76 MB: 30 MB of networks and 46 MB of language mode
 
 For the latest code from GitHub instead: `pip install git+https://github.com/datalab-to/indra.git`. To let the viewer compare with Tesseract, install `pip install "indra-ocr[tesseract]"` and a Tesseract binary.
 
-Python 3.10 or newer, tested on Linux (x86_64 and aarch64, Python 3.10 to 3.13) and macOS (Apple silicon). It installs ONNX Runtime, OpenCV and pypdfium2, and no PyTorch. The models download from Hugging Face on the first run and are cached. To use a local copy, set `INDRA_OCR_MODEL_DIR` or pass `--model-dir`.
+Python 3.10 or newer, tested on Linux (x86_64 and aarch64, Python 3.10 to 3.13), macOS (Apple silicon) and Windows 11 (x64). It installs ONNX Runtime, OpenCV and pypdfium2, and no PyTorch. The models download from Hugging Face on the first run and are cached. To use a local copy, set `INDRA_OCR_MODEL_DIR` or pass `--model-dir`.
 
 # Usage
 
@@ -196,11 +196,13 @@ The window is the viewer in the system webview (WebView2 on Windows, WKWebView o
 To package it as a self-contained app (the models go inside, so it runs with no network and no Python install):
 
 ```shell
+pip install "indra-ocr[desktop,build]"    # adds PyInstaller
 python packaging/build.py                 # -> dist/IndraOCR/ (about 300 MB)
 python packaging/build.py --console 0     # release build: no console window
+python packaging/build.py --models packaging/models   # reuse an already staged folder
 ```
 
-The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); on Windows the target machine needs the WebView2 runtime, which Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
+The app is `dist/IndraOCR/IndraOCR` (`IndraOCR.exe` on Windows): that folder is what you ship. The build stages the models from the local Hugging Face cache (or `--models DIR`), runs PyInstaller with `packaging/indra_ocr.spec`, and then runs `dist/IndraOCR/IndraOCR --selftest`, which starts the server, uploads a generated page and reads it back over HTTP: a bundle that cannot OCR fails the build instead of failing on a user's machine. PyInstaller does not cross-compile, so each platform is built on its own OS (`.github/workflows/desktop.yml` does the three); the spec bundles pywebview's .NET assemblies on Windows, where the target machine needs the WebView2 runtime that Windows 10 and 11 ship with. On Linux the window is WebKitGTK, so the build machine needs PyGObject and `gir1.2-webkit2-4.1` (build.py adds the system `dist-packages` to PyInstaller's path for them).
 
 ## Output
 

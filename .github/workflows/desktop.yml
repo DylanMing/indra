@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install the app and the packager
-        run: pip install ".[desktop]" pyinstaller
+        run: pip install ".[desktop,build]"
 
       - name: Fetch the models into the cache
         run: python -c "from indra_ocr.models import model_dir; print(model_dir(math=True))"
