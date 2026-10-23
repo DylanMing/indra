@@ -148,3 +148,26 @@ def test_the_icns_is_a_real_macos_icon():
         # 16..512 at 1x and 2x, which is what Finder and the Dock pick from
         sizes = {s[0] for s in im.info["sizes"]}
         assert {16, 32, 128, 256, 512} <= sizes
+
+
+def test_the_version_is_declared_in_both_places():
+    """A release bumps pyproject.toml and __init__.py; the two must agree.
+
+    The tag is checked against pyproject.toml by the publish workflow, so a
+    missed second bump would ship wheels that call themselves something else.
+    """
+    import re
+
+    from indra_ocr import __version__
+
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    declared = re.search(r'^version = "([^"]+)"', text, re.M)
+    assert declared, "no version in pyproject.toml"
+    assert declared.group(1) == __version__
+
+
+def test_the_changelog_has_a_section_for_the_release():
+    from indra_ocr import __version__
+
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"\n## {__version__}\n" in changelog
