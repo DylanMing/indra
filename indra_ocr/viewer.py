@@ -739,6 +739,19 @@ def _main():
     )
     ap.add_argument("--tesseract-lang", default="eng")
     ap.add_argument("--math", action="store_true", help="initially write math as LaTeX")
+    ap.add_argument(
+        "--open",
+        type=Path,
+        metavar="FILE",
+        help="open this document once the page loads (what a wrapper passes when "
+        "the user double-clicked a file)",
+    )
+    ap.add_argument(
+        "--print-port",
+        action="store_true",
+        help="print one JSON line with the bound port instead of a sentence (for a "
+        "wrapper such as the Electron shell: it needs to know the URL, not read prose)",
+    )
     a = ap.parse_args()
     src = source_options(a)
     defaults = {
@@ -750,6 +763,8 @@ def _main():
         "max_pages": a.max_pages,
     }
     engine = Engine(a.model_dir, a.threads, a.tesseract, a.tesseract_lang, defaults)
+    if a.open is not None:
+        engine.preload = a.open.expanduser().resolve()
     try:
         srv = LocalServer(("127.0.0.1", a.port), make_handler(engine))
     except OSError as e:  # the port is taken by another program
@@ -760,8 +775,12 @@ def _main():
         raise SystemExit(1) from None
     port = srv.server_address[1]  # --port 0 asks the system for a free one
     url = f"http://localhost:{port}"
-    print(f"Indra OCR viewer on {url}  ({a.threads} threads)", flush=True)
-    if not a.no_browser:
+    if a.print_port:
+        # One line, so a wrapper can read it and nothing else has to be parsed.
+        print(json.dumps({"port": port, "url": url}), flush=True)
+    else:
+        print(f"Indra OCR viewer on {url}  ({a.threads} threads)", flush=True)
+    if not a.no_browser and not a.print_port:
         _open_browser(url)
     srv.serve_forever()
 

@@ -1,0 +1,14 @@
+{
+  "name": "indra-ocr-electron-poc",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Proof of concept: an Electron shell around the Indra OCR viewer",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

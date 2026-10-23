@@ -193,6 +193,65 @@ def test_the_viewer_opens_a_browser_unless_told_not_to(monkeypatch, capsys):
     assert opened == ["http://localhost:8788"], "no second window"
 
 
+def test_print_port_is_one_json_line_a_wrapper_can_read(monkeypatch, capsys):
+    """The Electron proof of concept needs the URL, not a sentence."""
+    import json
+    import sys
+
+    import indra_ocr.viewer as v
+
+    opened = []
+    monkeypatch.setattr(v, "Engine", lambda *a, **k: object())
+    monkeypatch.setattr(v.webbrowser, "open", opened.append)
+
+    class FakeServer:
+        def __init__(self, addr, handler):
+            self.server_address = ("127.0.0.1", 51234)
+
+        def serve_forever(self):
+            pass
+
+    monkeypatch.setattr(v, "LocalServer", FakeServer)
+    monkeypatch.setattr(sys, "argv", ["indra-ocr-viewer", "--print-port"])
+    v._main()
+
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 1, out
+    assert json.loads(out[0]) == {"port": 51234, "url": "http://localhost:51234"}
+    assert opened == [], "a wrapper opens its own window"
+
+
+def test_open_hands_that_file_to_the_page(monkeypatch, tmp_path):
+    """`--open report.pdf`: what the app passes when the user double-clicked one."""
+    import sys
+
+    import indra_ocr.viewer as v
+
+    doc = tmp_path / "report.pdf"
+    doc.write_bytes(b"%PDF-1.4\n")
+    made = {}
+
+    class FakeEngine:
+        def __init__(self, *a, **k):
+            self.preload = None
+            made["engine"] = self
+
+    class FakeServer:
+        def __init__(self, addr, handler):
+            self.server_address = ("127.0.0.1", 51235)
+
+        def serve_forever(self):
+            pass
+
+    monkeypatch.setattr(v, "Engine", FakeEngine)
+    monkeypatch.setattr(v, "LocalServer", FakeServer)
+    monkeypatch.setattr(
+        sys, "argv", ["indra-ocr-viewer", "--print-port", "--open", str(doc)]
+    )
+    v._main()
+    assert made["engine"].preload == doc.resolve()
+
+
 def test_a_machine_with_no_browser_is_not_an_error(monkeypatch):
     """A headless box has nothing to open: the URL is printed anyway."""
     import indra_ocr.viewer as v
