@@ -5,13 +5,15 @@
 Same models (Hugging Face tag `v1.1.0`). One change, and one that was measured and
 deliberately not made.
 
-- **OpenCV's video backend is no longer in the bundle.** cv2 ships
-  `opencv_videoio_ffmpeg500_64.dll` — 31 MB — and loads it only when a
-  `VideoCapture` or `VideoWriter` is opened, which this app never does: it reads
-  PDFs, images and the clipboard. The spec filters that DLL out of the finished
-  analysis, before `COLLECT`, so the result does not depend on whether the copy
-  comes from `collect_all("cv2")` or from PyInstaller's cv2 hook. OpenCV itself
-  stays. The self test runs inside the built folder and still reads its page.
+- **OpenCV's video backend is no longer in the Windows bundle.** The Windows
+  cv2 wheel ships `opencv_videoio_ffmpeg500_64.dll`, 31 MB, which cv2 loads only
+  when a `VideoCapture` or `VideoWriter` is opened — and this app reads PDFs,
+  images and the clipboard, never a video. The spec filters that DLL out of the
+  finished analysis, before `COLLECT`, so it does not matter whether the copy
+  comes from `collect_all("cv2")` or from PyInstaller's cv2 hook. Windows goes
+  from 352 MB to 321 MB and the installer from 160 MB to 151 MB; macOS (466 MB)
+  and Linux (736 MB) do not carry that DLL and are unchanged. OpenCV itself
+  stays, and the self test runs inside each built folder.
 - **Replacing OpenCV altogether was tried and rejected.** A Pillow/NumPy
   implementation of the six calls the pipeline makes (`resize`, rotation,
   connected components, decode, encode, draw text) takes 118 MB out of the

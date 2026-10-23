@@ -223,7 +223,7 @@ To package it as a self-contained app (the models go inside, so it runs with no 
 
 ```shell
 pip install "indra-ocr[desktop,build]"    # adds PyInstaller
-python packaging/build.py                 # -> dist/IndraOCR/ (about 320 MB; 700 MB on Linux, with GTK)
+python packaging/build.py                 # -> dist/IndraOCR/ (about 320 MB on Windows; 735 MB on Linux, with GTK)
 python packaging/build.py --console 0     # release build: no console window
 python packaging/build.py --models packaging/models   # reuse an already staged folder
 python packaging/build.py --console 0 --installer     # ... and a Windows setup .exe
@@ -236,7 +236,7 @@ On Linux the window is WebKitGTK. The bundle carries GTK 3 (PyInstaller picks it
 
 ### Windows installer
 
-`--installer` runs Inno Setup (`packaging/indra_ocr.iss`) after the build and writes `dist/IndraOCR-<version>-setup.exe`: about 154 MB, lzma2, English and Simplified Chinese. It installs per user (no admin prompt) into `%LOCALAPPDATA%\Programs\IndraOCR`, with a Start menu shortcut, an uninstall entry and, if the box is ticked, a `.pdf` association that starts the app on the double-clicked file. Needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`); `build.py` finds `ISCC.exe` on the path or in the usual install folders.
+`--installer` runs Inno Setup (`packaging/indra_ocr.iss`) after the build and writes `dist/IndraOCR-<version>-setup.exe`: about 151 MB, lzma2, English and Simplified Chinese. It installs per user (no admin prompt) into `%LOCALAPPDATA%\Programs\IndraOCR`, with a Start menu shortcut, an uninstall entry and, if the box is ticked, a `.pdf` association that starts the app on the double-clicked file. Needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`); `build.py` finds `ISCC.exe` on the path or in the usual install folders.
 
 ```shell
 python packaging/build.py --console 0 --installer
@@ -288,7 +288,7 @@ On macOS the spec builds a real bundle next to the one-folder build — `dist/In
 python packaging/build.py --console 0 --dmg
 ```
 
-That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 466 MB bundle compresses to about 200 MB, against 160 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
+That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 466 MB bundle compresses to about 200 MB, against 151 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
 
 The app is not signed or notarised either, so Gatekeeper says "“Indra OCR” cannot be opened because Apple cannot check it for malicious software". To open it once: right-click the app → **Open** → **Open**. Or remove the quarantine flag the download carries:
 
