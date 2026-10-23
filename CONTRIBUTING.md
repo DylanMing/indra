@@ -18,6 +18,7 @@ The tests need no models and no network: the fixtures are generated in `tmp_path
 
 | file | what it holds |
 | --- | --- |
+| `__init__.py` | the public API — `load()`, `convert_many()`, `usable_cores` — and `__version__` |
 | `pipeline.py` | the pipeline on ONNX Runtime: line detection, CTC recognition, reading order; `Engine` is what every front end drives |
 | `document.py` | whole documents: the PDF text layer where it can be trusted, OCR for the rest, page by page |
 | `textlayer.py` | text-layer runs from pdfium, and the checks that decide whether to trust them |
@@ -34,7 +35,7 @@ Two conventions are worth knowing. The `*_post.py` and `*_preproc.py` modules ar
 
 ```shell
 pytest -q                          # everything
-pytest tests/test_pipeline.py -q   # one file
+pytest tests/test_textlayer.py -q  # one file
 pytest -q -k window                # by name
 ```
 
