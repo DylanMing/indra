@@ -167,6 +167,25 @@ def build_installer(version: str, dist: Path) -> Path:
     return setup
 
 
+def copy_licenses(dest: Path) -> list[Path]:
+    """Put the licence texts where the user of a bundle will find them.
+
+    The bundle ships the model weights, and those are not Apache-2.0: the
+    modified OpenRAIL-M requires that anyone who receives the weights receives
+    that licence too. Apache-2.0 wants the notice and the statement of changes
+    beside the code. See THIRD-PARTY-NOTICES.md for the summary.
+    """
+    written = []
+    for name in ("LICENSE", "MODELS-LICENSE.txt", "THIRD-PARTY-NOTICES.md"):
+        src = ROOT / name
+        if not src.is_file():
+            raise SystemExit(f"{src} is missing: a bundle has to ship it")
+        out = dest / name
+        shutil.copyfile(src, out)
+        written.append(out)
+    return written
+
+
 def stage_dmg_folder(app: Path, stage: Path) -> Path:
     """What the mounted image shows: the bundle, and a link to /Applications.
 
@@ -306,6 +325,15 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"build finished but {exe} is missing")
     size = sum(f.stat().st_size for f in app.rglob("*") if f.is_file())
     print(f"built {app} ({size / 1e6:.0f} MB)", flush=True)
+    for path in copy_licenses(app):
+        print(f"licence {path.name}", flush=True)
+    # The .app wraps the same folder; the texts belong inside it too, so the
+    # .dmg a Mac user mounts carries them along.
+    mac_app = ROOT / "dist" / BUNDLE
+    if mac_app.is_dir():
+        resources = mac_app / "Contents" / "Resources"
+        if resources.is_dir():
+            copy_licenses(resources)
 
     if not a.skip_selftest:
         print("checking the build (--selftest) ...", flush=True)

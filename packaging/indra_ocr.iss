@@ -23,8 +23,11 @@ AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=Indra OCR
-AppPublisherURL=https://github.com/datalab-to/indra
+; A fork build: the publisher points at this repository, and the About text says
+; so. The upstream project keeps its own name and its own releases.
+AppPublisher={#AppName} (fork build)
+AppPublisherURL=https://github.com/DylanMing/indra
+AppSupportURL=https://github.com/DylanMing/indra/issues
 DefaultDirName={autopf}\IndraOCR
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -32,6 +35,9 @@ DisableDirPage=auto
 OutputDir=..\dist
 OutputBaseFilename=IndraOCR-{#AppVersion}-setup
 SetupIconFile=indra_ocr.ico
+; The code is Apache-2.0 and the weights are under the modified OpenRAIL-M: a
+; user has to see that before the install, and both texts go into {app}.
+LicenseFile={#SourceDir}\THIRD-PARTY-NOTICES.md
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
 VersionInfoVersion={#AppVersion}

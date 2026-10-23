@@ -4,6 +4,8 @@ import hashlib
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -61,6 +63,59 @@ def test_the_setup_script_is_there_and_takes_the_defines():
     # per-user install, so no admin prompt for a 350 MB OCR app
     assert "PrivilegesRequired=lowest" in text
     assert build.ICON.is_file()
+
+
+def test_the_installer_shows_the_licences():
+    """The weights are not Apache-2.0: the user has to see that before installing."""
+    build = load_build()
+    text = build.ISS.read_text(encoding="utf-8")
+    assert "LicenseFile={#SourceDir}\\THIRD-PARTY-NOTICES.md" in text
+    # a fork build does not present itself as the upstream publisher
+    assert "datalab-to/indra" not in text.split("AppPublisherURL=")[1].splitlines()[0]
+
+
+def test_the_licences_travel_with_the_bundle(tmp_path):
+    build = load_build()
+    written = build.copy_licenses(tmp_path)
+    names = {p.name for p in written}
+    assert names == {"LICENSE", "MODELS-LICENSE.txt", "THIRD-PARTY-NOTICES.md"}
+    assert all(p.is_file() and p.stat().st_size > 1000 for p in written)
+    model = (tmp_path / "MODELS-LICENSE.txt").read_text(encoding="utf-8")
+    assert "OPEN RAIL-M" in model and "twenty million" in model
+
+
+def test_the_build_refuses_to_ship_a_bundle_without_its_licences(tmp_path, monkeypatch):
+    build = load_build()
+    monkeypatch.setattr(build, "ROOT", tmp_path)  # no LICENSE here
+    with pytest.raises(SystemExit) as err:
+        build.copy_licenses(tmp_path / "dist")
+    assert "LICENSE" in str(err.value)
+
+
+def test_the_release_attaches_the_four_downloads():
+    """A tag has to produce something a user can download without an account."""
+    workflow = (ROOT / ".github" / "workflows" / "desktop.yml").read_text(encoding="utf-8")
+    assert "\n  release:\n" in workflow
+    assert "needs: build" in workflow
+    assert 'if: startsWith(github.ref, \'refs/tags/\')' in workflow
+    # a fork's GITHUB_TOKEN is read-only unless the job asks for more
+    assert "permissions:\n      contents: write" in workflow
+    assert "gh release create" in workflow
+    assert "SHA256SUMS" in workflow
+    assert "unofficial fork build" in workflow
+    # the archives are made on the runner, so the executable bit survives
+    assert "IndraOCR-$v-windows-x64.zip" in workflow
+    assert "IndraOCR-$v-linux-x64.tar.gz" in workflow
+
+
+def test_the_fork_says_it_is_a_fork():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    head = readme.split("\n## ")[0]
+    assert "This repository is a fork" in head
+    assert "THIRD-PARTY-NOTICES.md" in head
+    notices = (ROOT / "THIRD-PARTY-NOTICES.md").read_text(encoding="utf-8")
+    assert "Apache-2.0" in notices and "OPEN RAIL-M" in notices
+    assert "not" in notices and "Datalab" in notices
 
 
 def test_the_installer_is_found_or_reported(monkeypatch):
