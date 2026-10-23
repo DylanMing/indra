@@ -73,9 +73,20 @@ indra-ocr-desktop --windowtest     # needs a display; CI runs it under xvfb
    git tag v1.1.5 && git push origin v1.1.5
    ```
 
-4. The tag starts both workflows. `desktop` builds the three bundles and the installer. `publish` checks that the tag matches `pyproject.toml`, runs the tests, builds the sdist and the wheel, checks them with `twine` and that nothing is over 20 MB, and then publishes to PyPI — that last job only runs **upstream**: PyPI's trusted publisher names `datalab-to/indra` and the `pypi` environment, so on a fork the publish job is skipped and the build job still runs.
+4. The tag starts both workflows. `desktop` builds the three bundles and the installer, then a `release` job puts four downloads on a GitHub Release — the Windows `.zip`, the setup `.exe` with its `.sha256`, the Linux `.tar.gz` and the macOS `.dmg` with its `.sha256`, plus a `SHA256SUMS`. That job needs `permissions: contents: write`, because a fork's `GITHUB_TOKEN` is read-only by default; without it the release step is a 403. Releases are how people get the app (an artifact needs a GitHub account and expires), and the release title says *unofficial fork build* because that is what it is.
+5. `publish` checks that the tag matches `pyproject.toml`, runs the tests, builds the sdist and the wheel, checks them with `twine` and that nothing is over 20 MB, and then publishes to PyPI — that last job only runs **upstream**: PyPI's trusted publisher names `datalab-to/indra` and the `pypi` environment, so on a fork the publish job is skipped and the build job still runs.
 
 A published version cannot be replaced on PyPI: if the tag and the declared version differ, the job stops before anything is uploaded. To check the flow without publishing, run the `publish` workflow manually — it builds and tests, and stops before the upload.
+
+## Licences
+
+Three texts travel with every build, and `packaging/build.py` fails the build rather than ship without one:
+
+- `LICENSE` — the code, Apache-2.0 (upstream's).
+- `MODELS-LICENSE.txt` — the model weights, the *AI PUBS OPEN RAIL-M License (Modified)* from the Hugging Face repo. Not a permissive licence: free for research and personal use, and for organisations under 20 million USD of revenue and funding, and not for use competing with Datalab's API.
+- `THIRD-PARTY-NOTICES.md` — what the two mean together, which files this fork changed (Apache-2.0 section 4(b) asks for that), the third-party components, and where to report what. Update the change list when you change something an upstream user would notice.
+
+The Windows installer shows the notices before installing (`LicenseFile=`) and names this fork as the publisher. Keep it that way: the fork may redistribute (that is what Apache-2.0 allows) but it must not read as a Datalab release.
 
 ## Signing
 

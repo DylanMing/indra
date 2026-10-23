@@ -21,6 +21,8 @@
 
 # Indra OCR
 
+> **This repository is a fork.** It is [DylanMing/indra](https://github.com/DylanMing/indra), forked from [datalab-to/indra](https://github.com/datalab-to/indra), and it adds the desktop app: a native window, a tray icon, a Windows installer and a macOS `.dmg`, published on [this fork's releases](https://github.com/DylanMing/indra/releases). Those builds are unofficial and Datalab does not support them. The code is Apache-2.0; the model weights keep their [modified OpenRAIL-M licence](https://huggingface.co/datalab-to/indra-ocr/blob/main/LICENSE), and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists what this fork changed.
+
 Indra OCR is a 1M-parameter OCR model that runs on CPU. It turns PDFs and images into markdown, text, or JSON with boxes, and it reads handwriting, 80+ languages, and pages at any angle.
 
 - **Accurate** - 66.7 on [OmniParseBench](https://github.com/datalab-to/omni_parse_bench) (71.4 with `--math`), ahead of PaddleOCR's full PP-StructureV3 pipeline (58.4). Its text score (46.7) is ahead of PaddleOCR's PP-OCR text models (35.8) and Tesseract (19.3).
@@ -251,7 +253,9 @@ macOS (`codesign --deep --options runtime --sign "Developer ID Application: ..."
 
 ### Installing on Windows
 
-Double-click `IndraOCR-<version>-setup.exe`. It installs per user, so there is no admin prompt; the wizard is in English and Simplified Chinese.
+Download `IndraOCR-<version>-setup.exe` from [this fork's releases](https://github.com/DylanMing/indra/releases) (the `.sha256` is beside it in each release), then double-click it. It installs per user, so there is no admin prompt; the wizard is in English and Simplified Chinese, and shows the licences before it installs.
+
+These builds are unofficial: they come from a fork, not from Datalab, and the model weights keep their own licence (see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).
 
 **The installer is not code signed.** There is no Authenticode certificate behind it, so Windows cannot show who published it, and two prompts reflect that:
 

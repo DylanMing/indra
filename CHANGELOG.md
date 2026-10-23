@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.5
+
+Same models (Hugging Face tag `v1.1.0`). The first release of this fork to publish
+the desktop builds properly.
+
+- **The bundles shipped no licence.** They carry the model weights, which are not
+  Apache-2.0: the modified OpenRAIL-M asks that anyone who receives the weights
+  receives its text, and Apache-2.0 asks for the notice and a statement of changes.
+  Nothing said either. `MODELS-LICENSE.txt` and `THIRD-PARTY-NOTICES.md` are in the
+  repository now, and the build copies all three texts into `dist/IndraOCR/` (and
+  into `IndraOCR.app/Contents/Resources`, so the `.dmg` carries them). The Windows
+  installer shows the notices before it installs (`LicenseFile=`), and calls itself a
+  fork build rather than pointing at upstream as the publisher.
+- **A release, not a pile of artifacts.** `actions/upload-artifact` needs a GitHub
+  account to download and keeps files for 90 days. A tag now also creates a GitHub
+  Release, with all four downloads and a `SHA256SUMS`, titled "unofficial fork
+  build" and opening with the licence and support situation. The release job asks
+  for `contents: write` because a fork's token is read-only by default.
+- **The downloads are archives.** The Windows folder is a `.zip` and the Linux one a
+  `.tar.gz` made on the runner, so the archive carries the executable bit that
+  upload-artifact's own zip drops, and the filename carries the version.
+- **The README says it is a fork**, at the top and under *Installing on Windows*,
+  with what that means: unofficial, Apache-2.0 code, weights under their own licence.
+
 ## 1.1.4
 
 Same models (Hugging Face tag `v1.1.0`). The 1.1.3 tag stays as the snapshot CI
