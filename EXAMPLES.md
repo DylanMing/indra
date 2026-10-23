@@ -1,6 +1,6 @@
 # Indra OCR examples
 
-Real Indra OCR outputs on [OmniParseBench](https://github.com/datalab-to/omni_parse_bench) pages, with default settings (`--mode auto`, page headers and footers kept) unless a section says otherwise. The boxes are drawn from the JSON output: colored boxes are layout blocks with their label, faint blue boxes are lines. The outputs are not edited. The markdown excerpts are cut at "...". Back to the [README](README.md).
+Real Indra OCR outputs on [OmniParseBench](https://github.com/datalab-to/omni_parse_bench) pages, with default settings (`--mode auto`, page headers and footers kept) unless a section says otherwise. The boxes are drawn from the JSON output: colored boxes are layout blocks with their label, faint blue boxes are lines. The outputs are not edited. The markdown excerpts are cut at "...". Some excerpts contain `##` lines: they are the page's own headings, inside a fenced block, not headings of this file. Back to the [README](README.md).
 
 ## Handwriting
 

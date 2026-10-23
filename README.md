@@ -36,6 +36,19 @@ Indra OCR is named for [Indra](https://en.wikipedia.org/wiki/Indra).
 
 <img src="assets/benchmarks/throughput.png" width="700px"/>
 
+## Contents
+
+- [Quickstart](#quickstart)
+- [Examples](#examples)
+- [Installation](#installation)
+- [Usage](#usage) — [CLI](#cli), [From python](#from-python), [Viewer](#viewer), [Desktop app](#desktop-app)
+- [Output](#output)
+- [Languages](#languages)
+- [Limitations](#limitations)
+- [Math](#math)
+- [Benchmarks](#benchmarks)
+- [Credits](#credits), [Contributing](#contributing), [License](#license), [Commercial usage](#commercial-usage)
+
 ## Try Datalab's Managed Platform
 
 Indra OCR is built for speed on CPUs. When you need the highest accuracy, on handwriting, math, complex tables and degraded scans, our managed platform runs [Chandra](https://github.com/datalab-to/chandra), our state of the art OCR model, with zero data retention by default, SOC 2 Type 2, and custom BAAs.
@@ -208,7 +221,7 @@ To package it as a self-contained app (the models go inside, so it runs with no 
 
 ```shell
 pip install "indra-ocr[desktop,build]"    # adds PyInstaller
-python packaging/build.py                 # -> dist/IndraOCR/ (about 350 MB)
+python packaging/build.py                 # -> dist/IndraOCR/ (about 350 MB; 730 MB on Linux, with GTK)
 python packaging/build.py --console 0     # release build: no console window
 python packaging/build.py --models packaging/models   # reuse an already staged folder
 python packaging/build.py --console 0 --installer     # ... and a Windows setup .exe
@@ -271,7 +284,7 @@ On macOS the spec builds a real bundle next to the one-folder build — `dist/In
 python packaging/build.py --console 0 --dmg
 ```
 
-That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 340 MB bundle compresses to about 200 MB, against 160 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
+That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 352 MB bundle compresses to about 200 MB, against 160 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
 
 The app is not signed or notarised either, so Gatekeeper says "“Indra OCR” cannot be opened because Apple cannot check it for malicious software". To open it once: right-click the app → **Open** → **Open**. Or remove the quarantine flag the download carries:
 
@@ -467,6 +480,14 @@ python bench/opb_indra.py --out runs/opb_auto --mode auto --procs 8
 ```
 
 Each page runs in a single-threaded worker process, page headers and footers kept. `--mode ocr` gives the OCR-only row, `--math` the `--math` row, `--suites` scores only the listed suites, `--limit N` scores the first N pages, and `--models` points at a local model folder. The run writes `summary.json` (the benchmark's own summary, plus median and p90 ms per page) and `pages.jsonl` (per page: time, source, tests passed). The tables above come from our x86 harness, which gives each page 4 threads. This script gives each page one thread, so its times differ, and its scores can differ by a few tenths of a point.
+
+# Contributing
+
+Bug reports and patches are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the development setup, a map of the modules, how to build the desktop app on your own machine, and what a release does:
+
+```shell
+pip install -e ".[test]" && pytest -q     # no models, no network, about ten seconds
+```
 
 # Credits
 

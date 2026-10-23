@@ -38,7 +38,10 @@ built and verified; these are the fixes it turned up.
   GTK), the flags that were only in `--help` (`--port`, `--threads`,
   `--tesseract-lang`, `--width`, `--height`, `--skip-selftest`), explicit exit
   codes, and two sections that were missing: *Upgrading and uninstalling* and
-  *Troubleshooting*.
+  *Troubleshooting*. The README has a table of contents, `CONTRIBUTING.md` covers
+  the development setup, a map of the modules, the app build and what a release
+  does, and two tests now fail when the version in `pyproject.toml` and
+  `indra_ocr/__init__.py` disagree, or when this file has no section for it.
 
 ## 1.1.3
 
