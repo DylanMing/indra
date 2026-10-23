@@ -25,7 +25,7 @@ INPUT_MULTIPLE = 32  # H and W must divide by this
 def page_to_input(gray: np.ndarray, long_side: int) -> tuple[np.ndarray, float]:
     """Resize a uint8 grayscale page so its long side is ``long_side`` and pad
     to a multiple of 32 with white.  Returns (float32 [H, W] ink map, scale)."""
-    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
+    import cv2
 
     h, w = gray.shape
     scale = long_side / max(h, w)
@@ -115,7 +115,7 @@ def decode(
     (each side), to absorb the +-1 px error of the 1/2-resolution output.
 
     Returns [N, 5] boxes in input pixels: x0, y0, x1, y1, score."""
-    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
+    import cv2
 
     prob = 1.0 / (1.0 + np.exp(-out[0]))
     mask = (prob > thresh).astype(np.uint8)

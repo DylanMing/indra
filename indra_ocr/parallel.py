@@ -40,7 +40,7 @@ def _max_workers_for_memory() -> int:
 
 def _init(load_kwargs: dict) -> None:
     global _conv
-    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
+    import cv2
 
     from . import load
 

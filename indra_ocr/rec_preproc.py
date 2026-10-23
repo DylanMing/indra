@@ -75,7 +75,7 @@ def crop_line(
     [window * height, W].  A tall window (``window`` > 1) keeps the text scale
     and adds the page above and below the line; its middle band is the
     window-1 crop.  dark: ``is_dark_line`` of the box, when already known."""
-    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
+    import cv2
 
     pad_y = (window * (1 + 2 * pad_y) - 1) / 2
     height = height * window

@@ -2,34 +2,24 @@
 
 ## 1.1.6
 
-Same models (Hugging Face tag `v1.1.0`). The bundle loses a third of its weight, and
-OpenCV with it: Windows 352 MB to 234 MB (installer 160 MB to 131 MB), macOS
-466 MB to 268 MB, Linux 730 MB to 492 MB. CI builds all three and runs
-`--selftest` inside each bundle; the self test passes without OpenCV.
+Same models (Hugging Face tag `v1.1.0`). One change, and one that was measured and
+deliberately not made.
 
-- **OpenCV is gone from the runtime.** It was 117 MB of the 352 MB bundle — 86 MB
-  of `cv2.pyd` plus 31 MB of its ffmpeg DLL — for six operations: resize, rotate,
-  label blobs, decode, encode and draw text. `indra_ocr/imaging.py` now does those
-  with Pillow and NumPy (the call sites still read `cv2.resize`, the module is
-  imported as `cv2`), and `opencv-python-headless` is only a test dependency, so
-  `tests/test_imaging.py` can check the layer against the library it replaced.
-  `tests/goldens/page.json` is a page read by the OpenCV build (961c17f): the test
-  requires the same lines, the same text and boxes within 6 px.
-- **What the swap changed, measured** on eight rotations of one 27-line page
-  (0°, 0.6°, ±1.2°, 2°, 4°, 6°, 8°, 12°), against the 1.1.5 build: the same line
-  texts on seven of them, max box drift 3.5 px, the same skew angle, and two pages
-  now recognised as a table where the OpenCV build flattened it into prose. The two
-  exceptions are heavily rotated pages (8°: one line's first character differs;
-  12°: the same 23 texts grouped into 27 lines instead of 28). A page takes about
-  0.55 s instead of 0.36 s — the deskew search rotates a thumbnail 70 times and
-  Pillow is 8x slower than OpenCV at that, though it releases the GIL, so the
-  thread pool still helps.
-- **The bundle carries no `cv2` at all.** `collect_all("cv2")` in the spec was
-  what pulled in the ffmpeg DLL even with the module excluded; it is out of the
-  spec and `cv2`/`opencv` are in `excludes`. `IndraOCR.exe --selftest` inside the
-  built folder reads a page without it.
-- **The README no longer asks for OpenCV.** The in-memory example uses Pillow, and
-  the dependency list, the size figures and the credits say what is shipped.
+- **OpenCV's video backend is no longer in the bundle.** cv2 ships
+  `opencv_videoio_ffmpeg500_64.dll` — 31 MB — and loads it only when a
+  `VideoCapture` or `VideoWriter` is opened, which this app never does: it reads
+  PDFs, images and the clipboard. The spec filters that DLL out of the finished
+  analysis, before `COLLECT`, so the result does not depend on whether the copy
+  comes from `collect_all("cv2")` or from PyInstaller's cv2 hook. OpenCV itself
+  stays. The self test runs inside the built folder and still reads its page.
+- **Replacing OpenCV altogether was tried and rejected.** A Pillow/NumPy
+  implementation of the six calls the pipeline makes (`resize`, rotation,
+  connected components, decode, encode, draw text) takes 118 MB out of the
+  bundle — and reads text identically on seven of eight small rotations of a test
+  page — but a page goes from 0.36 s to 0.55 s: the deskew search rotates a
+  thumbnail about seventy times and Pillow is 8x slower at that than OpenCV.
+  Not worth it for a third of the download, so 1.1.6 keeps OpenCV and records the
+  measurement here instead of repeating it later.
 
 ## 1.1.5
 

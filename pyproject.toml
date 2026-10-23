@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
-  "pillow",
+  "opencv-python-headless",
   "onnxruntime",
   "pypdfium2",
   "huggingface_hub",
@@ -26,11 +26,10 @@ Changelog = "https://github.com/datalab-to/indra/blob/main/CHANGELOG.md"
 Issues = "https://github.com/datalab-to/indra/issues"
 
 [project.optional-dependencies]
-desktop = ["pywebview", "pystray"]
+desktop = ["pywebview", "pillow", "pystray"]
 build = ["pyinstaller"]
 tesseract = ["pytesseract"]
-# opencv is test-only: tests/test_imaging.py checks the imaging layer against it
-test = ["pytest", "pillow", "pikepdf", "opencv-python-headless"]
+test = ["pytest", "pillow", "pikepdf"]
 
 [project.scripts]
 indra-ocr = "indra_ocr.cli:main"

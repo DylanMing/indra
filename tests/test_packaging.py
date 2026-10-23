@@ -118,6 +118,21 @@ def test_the_fork_says_it_is_a_fork():
     assert "not" in notices and "Datalab" in notices
 
 
+def test_the_spec_leaves_out_the_opencv_video_backend():
+    """cv2's 31 MB ffmpeg DLL is only opened by VideoCapture/VideoWriter.
+
+    PyInstaller brings it in through the cv2 package (and its hook), so the spec
+    filters the finished analysis, not just the lists it collects itself. Nothing
+    in the app opens a video, so the DLL is dead weight in every download.
+    """
+    spec = (ROOT / "packaging" / "indra_ocr.spec").read_text(encoding="utf-8")
+    assert "opencv_videoio_ffmpeg" in spec
+    assert "a.binaries = [b for b in a.binaries if _FFMPEG not in str(b[0])]" in spec
+    assert "a.datas = [d for d in a.datas if _FFMPEG not in str(d[0])]" in spec
+    # before COLLECT consumes them, or it would pack the original lists
+    assert spec.index("a.binaries = [b for b in a.binaries") < spec.index("coll = COLLECT")
+
+
 def test_the_installer_is_found_or_reported(monkeypatch):
     build = load_build()
     monkeypatch.setattr(build.shutil, "which", lambda name: None)

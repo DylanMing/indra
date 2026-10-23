@@ -109,7 +109,7 @@ def resolve_models(explicit: str | Path | None) -> Path | None:
 
 def sample_png(text: str = "Indra OCR desktop") -> bytes:
     """A white page with one line of text: enough for a headless self test."""
-    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
+    import cv2
     import numpy as np
 
     img = np.full((320, 1000, 3), 255, np.uint8)

@@ -22,13 +22,18 @@ ROOT = Path(SPECPATH).parent
 MODELS = ROOT / "packaging" / "models"
 
 datas, binaries, hiddenimports = [], [], []
-# cv2 used to be here: collect_all("cv2") dragged in 30 MB of ffmpeg, and nothing
-# in the app imports it any more (indra_ocr/imaging.py does the pixel work).
-for pkg in ("onnxruntime", "pypdfium2_raw"):
+for pkg in ("onnxruntime", "cv2", "pypdfium2_raw"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
     hiddenimports += h
+
+# OpenCV ships its video I/O backend as a separate 31 MB DLL and loads it when
+# a VideoCapture or VideoWriter is opened — never here (the app reads PDFs,
+# images and the clipboard). Leaving it out of the bundle costs nothing; the
+# filter also catches the copy PyInstaller's cv2 hook adds on its own, which is
+# why it sits before COLLECT rather than on the two lists above.
+_FFMPEG = "opencv_videoio_ffmpeg"
 
 # pywebview picks its backend at runtime, so its platform modules are imported
 # lazily and no static analysis finds them.
@@ -71,9 +76,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # the imaging layer replaced OpenCV: 117 MB of cv2 and its ffmpeg
-        "cv2",
-        "opencv",
         "torch",
         "torchvision",
         "tensorflow",
@@ -94,6 +96,11 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure)
+
+# The hook for cv2 adds the video DLL to the analysis itself, so filter the
+# finished lists rather than the ones built above.
+a.binaries = [b for b in a.binaries if _FFMPEG not in str(b[0])]
+a.datas = [d for d in a.datas if _FFMPEG not in str(d[0])]
 
 exe = EXE(
     pyz,

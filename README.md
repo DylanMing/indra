@@ -105,7 +105,7 @@ The default models are about 76 MB: 30 MB of networks and 46 MB of language mode
 
 For the latest code from GitHub instead: `pip install git+https://github.com/datalab-to/indra.git`. To let the viewer compare with Tesseract, install `pip install "indra-ocr[tesseract]"` and a Tesseract binary.
 
-Python 3.10 or newer, tested on Linux (x86_64 and aarch64, Python 3.10 to 3.13), macOS (Apple silicon) and Windows 11 (x64). It installs ONNX Runtime, pypdfium2 and Pillow, and no PyTorch. The models download from Hugging Face on the first run and are cached. To use a local copy, set `INDRA_OCR_MODEL_DIR` or pass `--model-dir`.
+Python 3.10 or newer, tested on Linux (x86_64 and aarch64, Python 3.10 to 3.13), macOS (Apple silicon) and Windows 11 (x64). It installs ONNX Runtime, OpenCV and pypdfium2, and no PyTorch. The models download from Hugging Face on the first run and are cached. To use a local copy, set `INDRA_OCR_MODEL_DIR` or pass `--model-dir`.
 
 # Usage
 
@@ -154,15 +154,14 @@ for i, page in conv.convert("paper.pdf"):
 An image file works the same way as a PDF (PNG, JPEG, TIFF, BMP, WebP; one page per TIFF frame). For an image already in memory, pass a grayscale `uint8` numpy array to `conv.ocr`:
 
 ```python
-from PIL import Image
-import numpy as np
+import cv2
 import indra_ocr
 
 conv = indra_ocr.load(threads=4)
-for i, page in conv.convert("scan.png"):  # an image file, any format Pillow reads
+for i, page in conv.convert("scan.png"):  # an image file
     print(page.text)
 
-gray = np.asarray(Image.open("photo.jpg").convert("L"))
+gray = cv2.cvtColor(cv2.imread("photo.jpg"), cv2.COLOR_BGR2GRAY)
 page = conv.ocr(gray)                     # an image in memory
 print(page.markdown)
 ```
@@ -224,7 +223,7 @@ To package it as a self-contained app (the models go inside, so it runs with no 
 
 ```shell
 pip install "indra-ocr[desktop,build]"    # adds PyInstaller
-python packaging/build.py                 # -> dist/IndraOCR/ (234 MB on Windows, 268 MB on macOS, 492 MB on Linux, which carries GTK)
+python packaging/build.py                 # -> dist/IndraOCR/ (about 320 MB; 700 MB on Linux, with GTK)
 python packaging/build.py --console 0     # release build: no console window
 python packaging/build.py --models packaging/models   # reuse an already staged folder
 python packaging/build.py --console 0 --installer     # ... and a Windows setup .exe
@@ -237,7 +236,7 @@ On Linux the window is WebKitGTK. The bundle carries GTK 3 (PyInstaller picks it
 
 ### Windows installer
 
-`--installer` runs Inno Setup (`packaging/indra_ocr.iss`) after the build and writes `dist/IndraOCR-<version>-setup.exe`: 131 MB, lzma2, English and Simplified Chinese. It installs per user (no admin prompt) into `%LOCALAPPDATA%\Programs\IndraOCR`, with a Start menu shortcut, an uninstall entry and, if the box is ticked, a `.pdf` association that starts the app on the double-clicked file. Needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`); `build.py` finds `ISCC.exe` on the path or in the usual install folders.
+`--installer` runs Inno Setup (`packaging/indra_ocr.iss`) after the build and writes `dist/IndraOCR-<version>-setup.exe`: about 154 MB, lzma2, English and Simplified Chinese. It installs per user (no admin prompt) into `%LOCALAPPDATA%\Programs\IndraOCR`, with a Start menu shortcut, an uninstall entry and, if the box is ticked, a `.pdf` association that starts the app on the double-clicked file. Needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`); `build.py` finds `ISCC.exe` on the path or in the usual install folders.
 
 ```shell
 python packaging/build.py --console 0 --installer
@@ -289,7 +288,7 @@ On macOS the spec builds a real bundle next to the one-folder build — `dist/In
 python packaging/build.py --console 0 --dmg
 ```
 
-That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the bundle compresses well — 1.1.6 measures a 268 MB app and an image of about 130 MB, against 131 MB for the Windows setup; 1.1.5 was 466 MB and 200 MB) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
+That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 466 MB bundle compresses to about 200 MB, against 160 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
 
 The app is not signed or notarised either, so Gatekeeper says "“Indra OCR” cannot be opened because Apple cannot check it for malicious software". To open it once: right-click the app → **Open** → **Open**. Or remove the quarantine flag the download carries:
 
@@ -500,5 +499,5 @@ Thank you to the following open source projects:
 
 - [ONNX Runtime](https://github.com/microsoft/onnxruntime)
 - [pypdfium2](https://github.com/pypdfium2-team/pypdfium2)
-- [Pillow](https://python-pillow.org)
+- [OpenCV](https://github.com/opencv/opencv)
 - [Hugging Face Hub](https://github.com/huggingface/huggingface_hub)
