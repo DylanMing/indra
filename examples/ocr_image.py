@@ -53,11 +53,12 @@ def main():
 def ocr_array_example():
     """An image already in memory (a camera frame, a crop, a decoded upload):
     pass a grayscale uint8 numpy array to ``conv.ocr``."""
-    import cv2  # installed with indra-ocr
+    import numpy as np
+    from PIL import Image
 
     conv = indra_ocr.load(threads=4)
-    color = cv2.imread("scan.png")  # any BGR / RGB uint8 array works the same way
-    gray = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
+    color = Image.open("scan.png")  # any RGB / BGR array works the same way
+    gray = np.asarray(color.convert("L"))
     page = conv.ocr(gray)
     print(page.text)
 

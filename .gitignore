@@ -7,3 +7,7 @@ build/
 uv.lock
 packaging/models/
 Packaging/models/
+# electron-poc/node_modules: 145 MB of npm packages, never tracked (the rule
+# lives here as well as in electron-poc so it still applies on a branch that
+# does not carry that folder)
+node_modules/
