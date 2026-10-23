@@ -284,7 +284,7 @@ On macOS the spec builds a real bundle next to the one-folder build — `dist/In
 python packaging/build.py --console 0 --dmg
 ```
 
-That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 352 MB bundle compresses to about 200 MB, against 160 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
+That writes `dist/IndraOCR-<version>.dmg` (`UDZO`, HFS+; the 466 MB bundle compresses to about 200 MB, against 160 MB for the Windows setup) holding `IndraOCR.app` and an `/Applications` link, so installing is a drag, and `IndraOCR-<version>.dmg.sha256` beside it. `hdiutil verify` runs on the result: an image that mounts empty fails the build. It has to be built on a Mac (PyInstaller does not cross-compile); `.github/workflows/desktop.yml` does it on `macos-latest` and uploads only the `.dmg`, because an uploaded `.app` loses its executable bit.
 
 The app is not signed or notarised either, so Gatekeeper says "“Indra OCR” cannot be opened because Apple cannot check it for malicious software". To open it once: right-click the app → **Open** → **Open**. Or remove the quarantine flag the download carries:
 
