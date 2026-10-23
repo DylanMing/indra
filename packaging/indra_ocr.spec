@@ -22,7 +22,9 @@ ROOT = Path(SPECPATH).parent
 MODELS = ROOT / "packaging" / "models"
 
 datas, binaries, hiddenimports = [], [], []
-for pkg in ("onnxruntime", "cv2", "pypdfium2_raw"):
+# cv2 used to be here: collect_all("cv2") dragged in 30 MB of ffmpeg, and nothing
+# in the app imports it any more (indra_ocr/imaging.py does the pixel work).
+for pkg in ("onnxruntime", "pypdfium2_raw"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -69,6 +71,9 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
+        # the imaging layer replaced OpenCV: 117 MB of cv2 and its ffmpeg
+        "cv2",
+        "opencv",
         "torch",
         "torchvision",
         "tensorflow",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "indra-ocr"
-version = "1.1.5"
+version = "1.1.6"
 description = "Fast CPU OCR: line detection, CTC recognition, reading order and markdown, on ONNX Runtime"
 readme = "README.md"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
-  "opencv-python-headless",
+  "pillow",
   "onnxruntime",
   "pypdfium2",
   "huggingface_hub",
@@ -26,10 +26,11 @@ Changelog = "https://github.com/datalab-to/indra/blob/main/CHANGELOG.md"
 Issues = "https://github.com/datalab-to/indra/issues"
 
 [project.optional-dependencies]
-desktop = ["pywebview", "pillow", "pystray"]
+desktop = ["pywebview", "pystray"]
 build = ["pyinstaller"]
 tesseract = ["pytesseract"]
-test = ["pytest", "pillow", "pikepdf"]
+# opencv is test-only: tests/test_imaging.py checks the imaging layer against it
+test = ["pytest", "pillow", "pikepdf", "opencv-python-headless"]
 
 [project.scripts]
 indra-ocr = "indra_ocr.cli:main"

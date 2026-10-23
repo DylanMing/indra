@@ -35,7 +35,7 @@ KEEP = 0.5  # pixels with a lower centre-line probability become paper
 def resize_window(a: np.ndarray, size: tuple[int, int]) -> np.ndarray:
     """Scale a window to ``size`` (w, h): linear down to half scale, area below
     (anti-aliasing).  INTER_AREA at a non-integer scale costs 20x more."""
-    import cv2
+    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
 
     shrink = size[1] / max(1, a.shape[0])
     interp = cv2.INTER_LINEAR if shrink >= 0.5 else cv2.INTER_AREA
@@ -63,7 +63,7 @@ def mask_windows(sess, wins: list[np.ndarray]) -> list[np.ndarray]:
     The probabilities are scaled back bilinearly before the threshold: a
     threshold at mask resolution with a nearest-neighbour upscale breaks the
     stroke edges (surya OCR 2 CER on M804 lines 0.30 -> 0.36)."""
-    import cv2
+    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
 
     if not wins:
         return []

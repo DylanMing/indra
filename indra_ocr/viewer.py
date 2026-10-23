@@ -53,7 +53,7 @@ MODES = ("auto", "ocr", "text")
 
 
 def decode_image(data: bytes):
-    import cv2
+    from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
 
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
     if img is None:
@@ -150,7 +150,7 @@ class Engine:
         return {"id": did, "pages": n}
 
     def page(self, did: str, n: int, opts: dict) -> dict:
-        import cv2
+        from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
 
         data = self.docs.get(did)
         if data is None:

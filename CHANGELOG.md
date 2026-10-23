@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.6
+
+Same models (Hugging Face tag `v1.1.0`). The bundle loses a third of its weight:
+352 MB to 235 MB on Windows, without OpenCV.
+
+- **OpenCV is gone from the runtime.** It was 117 MB of the 352 MB bundle — 86 MB
+  of `cv2.pyd` plus 31 MB of its ffmpeg DLL — for six operations: resize, rotate,
+  label blobs, decode, encode and draw text. `indra_ocr/imaging.py` now does those
+  with Pillow and NumPy (the call sites still read `cv2.resize`, the module is
+  imported as `cv2`), and `opencv-python-headless` is only a test dependency, so
+  `tests/test_imaging.py` can check the layer against the library it replaced.
+  `tests/goldens/page.json` is a page read by the OpenCV build (961c17f): the test
+  requires the same lines, the same text and boxes within 6 px.
+- **What the swap changed, measured** on eight rotations of one 27-line page
+  (0°, 0.6°, ±1.2°, 2°, 4°, 6°, 8°, 12°), against the 1.1.5 build: the same line
+  texts on seven of them, max box drift 3.5 px, the same skew angle, and two pages
+  now recognised as a table where the OpenCV build flattened it into prose. The two
+  exceptions are heavily rotated pages (8°: one line's first character differs;
+  12°: the same 23 texts grouped into 27 lines instead of 28). A page takes about
+  0.55 s instead of 0.36 s — the deskew search rotates a thumbnail 70 times and
+  Pillow is 8x slower than OpenCV at that, though it releases the GIL, so the
+  thread pool still helps.
+- **The bundle carries no `cv2` at all.** `collect_all("cv2")` in the spec was
+  what pulled in the ffmpeg DLL even with the module excluded; it is out of the
+  spec and `cv2`/`opencv` are in `excludes`. `IndraOCR.exe --selftest` inside the
+  built folder reads a page without it.
+- **The README no longer asks for OpenCV.** The in-memory example uses Pillow, and
+  the dependency list, the size figures and the credits say what is shipped.
+
 ## 1.1.5
 
 Same models (Hugging Face tag `v1.1.0`). The first release of this fork to publish

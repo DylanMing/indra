@@ -46,7 +46,6 @@ Files from upstream are otherwise unmodified; where one is, the change is listed
 | component | licence |
 | --- | --- |
 | ONNX Runtime | MIT |
-| OpenCV (headless) | Apache-2.0 |
 | pypdfium2 / PDFium | Apache-2.0 / BSD-3-Clause |
 | NumPy | BSD-3-Clause |
 | Hugging Face Hub | Apache-2.0 |

@@ -1,0 +1,59 @@
+{
+ "note": "captured by the cv2 build (961c17f); tests/test_imaging.py compares against it",
+ "lines": [
+  {
+   "text": "Reading order and boxes",
+   "box": [
+    70.3,
+    66.9,
+    370.0,
+    90.7
+   ]
+  },
+  {
+   "text": "first line of the document",
+   "box": [
+    68.0,
+    146.1,
+    372.2,
+    166.7
+   ]
+  },
+  {
+   "text": "second line with a few more words",
+   "box": [
+    68.0,
+    186.7,
+    481.6,
+    207.4
+   ]
+  },
+  {
+   "text": "third line, close to the one above",
+   "box": [
+    68.0,
+    227.1,
+    457.0,
+    247.9
+   ]
+  },
+  {
+   "text": "after a blank line: 12345",
+   "box": [
+    70.8,
+    306.5,
+    355.8,
+    326.8
+   ]
+  },
+  {
+   "text": "and the last line of the page",
+   "box": [
+    67.4,
+    346.8,
+    402.9,
+    371.5
+   ]
+  }
+ ]
+}

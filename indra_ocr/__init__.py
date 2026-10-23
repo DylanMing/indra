@@ -19,7 +19,7 @@ __all__ = [
     "load",
     "model_dir",
 ]
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
 
 def load(

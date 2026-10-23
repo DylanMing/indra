@@ -19,7 +19,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import cv2
+from . import imaging as cv2  # noqa: N813 - kept: the code reads like OpenCV
 import numpy as np
 
 from .det_post import decode, page_to_input
