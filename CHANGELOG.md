@@ -2,8 +2,10 @@
 
 ## 1.1.6
 
-Same models (Hugging Face tag `v1.1.0`). The bundle loses a third of its weight:
-352 MB to 235 MB on Windows, without OpenCV.
+Same models (Hugging Face tag `v1.1.0`). The bundle loses a third of its weight, and
+OpenCV with it: Windows 352 MB to 234 MB (installer 160 MB to 131 MB), macOS
+466 MB to 268 MB, Linux 730 MB to 492 MB. CI builds all three and runs
+`--selftest` inside each bundle; the self test passes without OpenCV.
 
 - **OpenCV is gone from the runtime.** It was 117 MB of the 352 MB bundle — 86 MB
   of `cv2.pyd` plus 31 MB of its ffmpeg DLL — for six operations: resize, rotate,
