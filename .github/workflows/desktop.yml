@@ -94,14 +94,34 @@ jobs:
       #     xcrun notarytool submit ... --wait
       #     xcrun stapler staple dist/IndraOCR.app
 
+      # The folder is what you ship, and a zip or a tarball is how a user gets it
+      # without losing the executable bit on Linux (upload-artifact's own zip
+      # drops it). The name carries the version, so a release asset says what it is.
+      - name: Pack the folder (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          Compress-Archive -Path dist\IndraOCR -DestinationPath "dist\IndraOCR-$v-windows-x64.zip"
+
+      - name: Pack the folder (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          v=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          tar -czf "dist/IndraOCR-$v-linux-x64.tar.gz" -C dist IndraOCR
+
       - uses: actions/upload-artifact@v4
-        # The one-folder build: what Windows ships (beside its installer) and
-        # what Linux ships. On macOS the .dmg is the whole story, because an
-        # uploaded .app loses its executable bit and its signature.
-        if: runner.os != 'macOS'
+        if: runner.os == 'Windows'
         with:
-          name: IndraOCR-${{ matrix.os }}
-          path: dist/IndraOCR
+          name: IndraOCR-windows-x64
+          path: dist/IndraOCR-*-windows-x64.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: IndraOCR-linux-x64
+          path: dist/IndraOCR-*-linux-x64.tar.gz
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
@@ -118,3 +138,87 @@ jobs:
           name: IndraOCR-macos-dmg
           path: dist/IndraOCR-*.dmg*
           if-no-files-found: error
+
+  # A tag puts the four artifacts on a GitHub Release, which is the only place a
+  # user can download them without an account and after 90 days. Everything here
+  # says "fork build": the code is Apache-2.0 and redistributable, the weights are
+  # under the modified OpenRAIL-M, and the bundles carry both texts.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    # A fork's GITHUB_TOKEN is read-only by default: without this the release is a 403.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+
+      - name: Collect the assets
+        run: |
+          mkdir -p out
+          find assets -type f \( -name '*.zip' -o -name '*.tar.gz' \
+            -o -name '*.exe' -o -name '*.dmg' -o -name '*.sha256' \) -exec cp {} out/ \;
+          ls -l out
+          (cd out && sha256sum * > SHA256SUMS)
+
+      - name: Release notes
+        run: |
+          v=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          python3 - "$v" > notes.md <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          ref = os.environ["GITHUB_REF_NAME"]
+          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          out, inside = [], False
+          for line in lines:
+              if line.startswith("## "):
+                  if out:
+                      break
+                  inside = line.strip() == f"## {version}"
+                  continue
+              if inside:
+                  out.append(line)
+          body = "\n".join(out).strip() or "See CHANGELOG.md."
+
+          print(
+              f"""**Unofficial fork build.** These files come from a fork of
+          [datalab-to/indra](https://github.com/datalab-to/indra), built from the commit this tag
+          points at. They are not a release by Datalab, and Datalab does not support them: the
+          desktop app, the installer and the `.dmg` are this fork's work, the models are upstream's.
+
+          | file | what it is |
+          | --- | --- |
+          | `IndraOCR-{version}-windows-x64.zip` | the app, unpack and run `IndraOCR.exe` |
+          | `IndraOCR-{version}-setup.exe` | the same, as an installer; `.sha256` beside it |
+          | `IndraOCR-{version}-linux-x64.tar.gz` | `tar xzf`, then `./IndraOCR/IndraOCR` (needs `libwebkit2gtk-4.1-0` for the window) |
+          | `IndraOCR-{version}.dmg` | macOS: open and drag to Applications; `.sha256` beside it |
+          | `SHA256SUMS` | every digest above, in `sha256sum` format |
+
+          The code is Apache-2.0 and the model weights are under the modified OpenRAIL-M. Both texts
+          are in the bundle (`LICENSE`, `MODELS-LICENSE.txt`) and the installer shows
+          [THIRD-PARTY-NOTICES.md](https://github.com/{repo}/blob/{ref}/THIRD-PARTY-NOTICES.md),
+          which also says what this fork changed. Read the weights licence before commercial use.
+
+          ## Changes in {version}
+
+          {body}"""
+          )
+          PY
+          head -12 notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Indra OCR ${GITHUB_REF_NAME} (unofficial fork build)" \
+            --notes-file notes.md \
+            out/*
